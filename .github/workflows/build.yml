@@ -30,7 +30,15 @@ jobs:
           path: artifacts/macos/Momo-Memo-macOS.zip
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v1.0.0
+          name: Momo Memo v1.0.0
+          body: |
+            Momo Memo macOS 初始版本。
+
+            - 原生 macOS 任务便利贴
+            - 支持项目、标签、子任务、提醒、统计与本周导出
+            - 下载 `Momo-Memo-macOS.zip`，解压后运行 `Momo Memo.app`
           files: artifacts/macos/Momo-Memo-macOS.zip
