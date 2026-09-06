@@ -1,0 +1,36 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: zsh ./scripts/build-macos.sh
+
+      - name: Package app
+        run: |
+          cd artifacts/macos
+          ditto -c -k --keepParent "Momo Memo.app" "Momo-Memo-macOS.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Momo-Memo-macOS
+          path: artifacts/macos/Momo-Memo-macOS.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/macos/Momo-Memo-macOS.zip
