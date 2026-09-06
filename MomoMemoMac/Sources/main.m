@@ -17,7 +17,8 @@ static NSString *MMUUID(void) {
 }
 
 static NSColor *MMColor(NSString *hex) {
-    NSString *clean = [[hex ?: @"#6B7280"] stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    NSString *source = hex.length ? hex : @"#6B7280";
+    NSString *clean = [source stringByReplacingOccurrencesOfString:@"#" withString:@""];
     unsigned value = 0x6B7280;
     [[NSScanner scannerWithString:clean] scanHexInt:&value];
     return [NSColor colorWithRed:((value >> 16) & 255) / 255.0
@@ -776,12 +777,13 @@ static NSString *MMDefaultExportDirectory(void) {
         NSArray *parts = [line componentsSeparatedByString:@","];
         NSString *name = parts.count > 0 ? [parts[0] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : @"";
         if (!name.length) continue;
+        NSInteger currentOrder = order++;
         [newProjects addObject:[@{
-            @"id": order == 0 ? @"inbox" : MMUUID(),
+            @"id": currentOrder == 0 ? @"inbox" : MMUUID(),
             @"name": name,
             @"color": parts.count > 1 ? parts[1] : @"#4F8EF7",
             @"allowRepeat": @(!(parts.count > 2 && [parts[2] containsString:@"no"])),
-            @"order": @(order++)
+            @"order": @(currentOrder)
         } mutableCopy]];
     }
     if (newProjects.count) self.store[@"projects"] = newProjects;
