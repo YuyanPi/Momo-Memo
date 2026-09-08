@@ -89,7 +89,7 @@ public static class ExportService
     }
 
     private static string Escape(string? value) => $"\"{(value ?? "").Replace("\"", "\"\"")}\"";
-    private static string TaskLine(MemoTask task) => $"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}{(task.HasDescription ? $"\n  - 描述：{task.Description.Replace("\r\n", " ").Replace('\n', ' ')}" : "")}\n  - 开始：{Format(task.StartAt)}；截止：{Format(task.DueAt)}{(task.IsCompleted ? $"；完成：{Format(task.CompletedAt)}" : "")}";
+    private static string TaskLine(MemoTask task) => $"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}{(task.HasDescription ? $"\n  - 描述：{task.Description.Replace("\r\n", " ").Replace('\n', ' ')}" : "")}\n  - 开始：{Format(task.StartAt)}\n  - 截止：{Format(task.DueAt)}{(task.IsCompleted ? $"\n  - 完成：{Format(task.CompletedAt)}" : "")}";
     private static string Format(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "未设置";
     private static string Format(DateTime value) => value.ToString("yyyy-MM-dd HH:mm");
     private static string YesNo(bool value) => value ? "是" : "否";
