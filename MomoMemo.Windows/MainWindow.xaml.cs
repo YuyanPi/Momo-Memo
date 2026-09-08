@@ -51,8 +51,9 @@ public partial class MainWindow : Window
         };
         foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
             views.Add(new($"project:{project.Id}", project.Name, project.Color));
-        foreach (var project in _data.Projects.Where(x => x.IsActive && x.IsHidden))
-            views.Add(new($"hidden:{project.Id}", $"隐藏 · {project.Name}", project.Color));
+        var hiddenCount = _data.Projects.Count(x => x.IsActive && x.IsHidden);
+        if (hiddenCount > 0)
+            views.Add(new("hidden", $"隐藏项目（{hiddenCount}）", "#B7A99B"));
         if (!views.Any(x => x.Id == _currentView)) _currentView = "unclassified";
         ViewsList.ItemsSource = views;
         ViewsList.SelectedItem = views.FirstOrDefault(x => x.Id == _currentView) ?? views[0];
@@ -99,7 +100,11 @@ public partial class MainWindow : Window
         TodayTasks.ItemsSource = todayTasks;
         WeekTasks.ItemsSource = weekTasks;
         LongTermTasks.ItemsSource = longTerm;
-        CompletedTasks.ItemsSource = completed;
+        var weekStartForCompleted = StartOfWeek(today);
+        CompletedTodayTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date == today).ToList();
+        CompletedWeekTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date >= weekStartForCompleted && (x.CompletedAt ?? x.ModifiedAt).Date < today).ToList();
+        CompletedEarlierTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date < weekStartForCompleted).ToList();
+        CompletedExpander.Header = $"已完成任务（当前项目，{completed.Count}）";
         TodayCountText.Text = $"{todayTasks.Count} 项";
         WeekCountText.Text = $"{weekTasks.Count} 项";
         LongTermCountText.Text = $"{longTerm.Count} 项";
@@ -111,7 +116,7 @@ public partial class MainWindow : Window
     {
         "none" or "unclassified" => _data.Tasks.Where(x => string.IsNullOrWhiteSpace(x.ProjectId)),
         _ when _currentView.StartsWith("project:") => _data.Tasks.Where(x => x.ProjectId == _currentView[8..]),
-        _ when _currentView.StartsWith("hidden:") => _data.Tasks.Where(x => x.ProjectId == _currentView[7..]),
+        "hidden" => Enumerable.Empty<MemoTask>(),
         _ => _data.Tasks
     };
 
@@ -170,12 +175,17 @@ public partial class MainWindow : Window
     {
         var project = SelectedProject();
         if (project is null) return;
+        DeleteProject(project);
+    }
+
+    private void DeleteProject(ProjectItem project)
+    {
         var count = _data.Tasks.Count(x => x.ProjectId == project.Id);
         var message = count == 0 ? $"删除项目“{project.Name}”吗？" : $"删除项目“{project.Name}”后，{count} 个任务将变为未分类。是否继续？";
         if (WpfMessageBox.Show(message, "删除项目", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         foreach (var task in _data.Tasks.Where(x => x.ProjectId == project.Id)) task.ProjectId = "";
         _data.Projects.Remove(project);
-        _currentView = _data.Projects.FirstOrDefault()?.Id is { } id ? $"project:{id}" : "none";
+        _currentView = _data.Projects.FirstOrDefault(x => x.IsActive && !x.IsHidden)?.Id is { } id ? $"project:{id}" : "unclassified";
         SaveAndRefresh(true);
     }
 
@@ -183,23 +193,36 @@ public partial class MainWindow : Window
     {
         var view = ViewsList.SelectedItem as ViewOption;
         if (view?.Id.StartsWith("project:") == true) return _data.Projects.FirstOrDefault(x => x.Id == view.Id[8..]);
-        return view?.Id.StartsWith("hidden:") == true ? _data.Projects.FirstOrDefault(x => x.Id == view.Id[7..]) : null;
+        return null;
     }
 
     private void Projects_RightClick(object? sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is not DependencyObject source) return;
         var item = ItemsControl.ContainerFromElement(ViewsList, source) as ListBoxItem;
-        if (item?.DataContext is not ViewOption view || !(view.Id.StartsWith("project:") || view.Id.StartsWith("hidden:"))) return;
+        if (item?.DataContext is not ViewOption view || !(view.Id.StartsWith("project:") || view.Id == "hidden")) return;
         ViewsList.SelectedItem = view;
         var menu = new ContextMenu();
+        if (view.Id == "hidden")
+        {
+            foreach (var hiddenProject in _data.Projects.Where(x => x.IsActive && x.IsHidden).ToList())
+            {
+                var projectMenu = new MenuItem { Header = hiddenProject.Name };
+                var restore = new MenuItem { Header = "恢复显示" };
+                restore.Click += (_, _) => { hiddenProject.IsHidden = false; _currentView = $"project:{hiddenProject.Id}"; SaveAndRefresh(true); };
+                var deleteHidden = new MenuItem { Header = "删除项目" };
+                deleteHidden.Click += (_, _) => DeleteProject(hiddenProject);
+                projectMenu.Items.Add(restore); projectMenu.Items.Add(deleteHidden); menu.Items.Add(projectMenu);
+            }
+            item.ContextMenu = menu; menu.IsOpen = true; e.Handled = true; return;
+        }
         var edit = new MenuItem { Header = "编辑项目" };
         edit.Click += EditProjectMenu_Click;
-        var hide = new MenuItem { Header = view.Id.StartsWith("hidden:") ? "恢复显示" : "隐藏项目" };
+        var hide = new MenuItem { Header = "隐藏项目" };
         hide.Click += (_, _) => { var project = SelectedProject(); if (project is null) return; project.IsHidden = !project.IsHidden; _currentView = project.IsHidden ? "unclassified" : $"project:{project.Id}"; SaveAndRefresh(true); };
         var delete = new MenuItem { Header = "删除项目" };
         delete.Click += DeleteProjectMenu_Click;
-        if (!view.Id.StartsWith("hidden:")) menu.Items.Add(edit);
+        menu.Items.Add(edit);
         menu.Items.Add(hide);
         menu.Items.Add(delete);
         item.ContextMenu = menu;
@@ -252,7 +275,14 @@ public partial class MainWindow : Window
 
     private void EditTask_Click(object sender, RoutedEventArgs e)
     {
-        var task = FindTask((sender as FrameworkElement)?.Tag);
+        EditTask((sender as FrameworkElement)?.Tag);
+    }
+
+    private void EditTaskMenu_Click(object sender, RoutedEventArgs e) => EditTask((sender as MenuItem)?.CommandParameter);
+
+    private void EditTask(object? id)
+    {
+        var task = FindTask(id);
         if (task is null) return;
         var editor = new TaskEditorWindow(task, _data.Projects) { Owner = this };
         if (editor.ShowDialog() == true) SaveAndRefresh();
@@ -273,7 +303,14 @@ public partial class MainWindow : Window
 
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
-        var task = FindTask((sender as FrameworkElement)?.Tag);
+        DeleteTask((sender as FrameworkElement)?.Tag);
+    }
+
+    private void DeleteTaskMenu_Click(object sender, RoutedEventArgs e) => DeleteTask((sender as MenuItem)?.CommandParameter);
+
+    private void DeleteTask(object? id)
+    {
+        var task = FindTask(id);
         if (task is null) return;
         if (task.EverCompleted || task.EverArchived)
         {
@@ -322,9 +359,10 @@ public partial class MainWindow : Window
     private void ShowStats_Click(object sender, RoutedEventArgs e)
     {
         var start = StartOfWeek(DateTime.Today);
-        var tasks = _data.Tasks.Where(x => !x.IsArchived && ((x.StartAt ?? x.CreatedAt) >= start && (x.StartAt ?? x.CreatedAt) < start.AddDays(7))).ToList();
+        var hiddenProjectIds = _data.Projects.Where(p => p.IsHidden).Select(p => p.Id).ToHashSet();
+        var tasks = _data.Tasks.Where(x => !x.IsArchived && !hiddenProjectIds.Contains(x.ProjectId) && ((x.StartAt ?? x.CreatedAt) >= start && (x.StartAt ?? x.CreatedAt) < start.AddDays(7))).ToList();
         var done = tasks.Count(x => x.IsCompleted);
-        var projects = _data.Projects.Select(p => $"{p.Name}：{tasks.Count(x => x.ProjectId == p.Id && x.IsCompleted)}/{tasks.Count(x => x.ProjectId == p.Id)}");
+        var projects = _data.Projects.Where(p => !p.IsHidden).Select(p => $"{p.Name}：{tasks.Count(x => x.ProjectId == p.Id && x.IsCompleted)}/{tasks.Count(x => x.ProjectId == p.Id)}");
         var priorities = new[] { "P0", "P1", "P2", "P3" }.Select(p => $"{p}：{tasks.Count(x => x.Priority == p && x.IsCompleted)}/{tasks.Count(x => x.Priority == p)}");
         WpfMessageBox.Show($"总任务：{tasks.Count}\n已完成：{done}\n未完成：{tasks.Count - done}\n逾期：{tasks.Count(x => x.IsOverdue)}\n完成率：{(tasks.Count == 0 ? 0 : done * 100 / tasks.Count)}%\n\n项目统计\n{string.Join("\n", projects)}\n\n优先级统计\n{string.Join("\n", priorities)}", "本周统计");
     }

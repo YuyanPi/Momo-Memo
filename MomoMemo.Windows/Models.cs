@@ -61,13 +61,13 @@ public sealed class MemoTask
     [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     [JsonIgnore] public string ProjectName { get; set; } = "未分类";
     [JsonIgnore] public string ProjectColor { get; set; } = "#B7A99B";
-    [JsonIgnore] public bool IsOverdue => !IsCompleted && !IsArchived && DueAt is not null && DueAt < DateTime.Now;
+    [JsonIgnore] public bool IsOverdue => !IsCompleted && Status != MemoTaskStatus.Paused && !IsArchived && DueAt is not null && DueAt < DateTime.Now;
     [JsonIgnore] public string StatusText => IsOverdue ? "已逾期" : Status switch
     {
         MemoTaskStatus.NotStarted => "未开始",
         MemoTaskStatus.InProgress => "进行中",
         MemoTaskStatus.Paused => "暂停",
-        _ => "已完成"
+        _ => $"已完成 {CompletedAt?.ToString("MM-dd HH:mm") ?? ""}".TrimEnd()
     };
     [JsonIgnore] public string TimeText => $"{(StartAt is null ? "未安排" : StartAt.Value.ToString("MM-dd HH:mm"))}  ·  {(DueAt is null ? "无截止" : $"截止 {DueAt:MM-dd HH:mm}")}";
     [JsonIgnore] public string DueText => DueAt is null ? "截止：今天" : $"截止 {DueAt:MM-dd HH:mm}";
