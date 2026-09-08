@@ -13,7 +13,10 @@ namespace MomoMemo;
 
 public partial class MainWindow : Window
 {
-    private sealed record ViewOption(string Id, string Title, string Color);
+    private sealed record ViewOption(string Id, string Title, string Color, int ReminderCount)
+    {
+        public bool HasReminder => ReminderCount > 0;
+    }
 
     private readonly StorageService _storage = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(1) };
@@ -21,6 +24,7 @@ public partial class MainWindow : Window
     private AppData _data = new();
     private string _currentView = "none";
     private string _lastReminderKey = "";
+    private readonly HashSet<string> _unreadReminderTaskIds = [];
 
     public MainWindow()
     {
@@ -47,13 +51,13 @@ public partial class MainWindow : Window
     {
         var views = new ObservableCollection<ViewOption>
         {
-            new("unclassified", "未分类任务", "#B7A99B")
+            new("unclassified", "未分类任务", "#B7A99B", ReminderCountForView("unclassified"))
         };
         foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
-            views.Add(new($"project:{project.Id}", project.Name, project.Color));
+            views.Add(new($"project:{project.Id}", project.Name, project.Color, ReminderCountForView($"project:{project.Id}")));
         var hiddenCount = _data.Projects.Count(x => x.IsActive && x.IsHidden);
         if (hiddenCount > 0)
-            views.Add(new("hidden", $"隐藏项目（{hiddenCount}）", "#B7A99B"));
+            views.Add(new("hidden", $"隐藏项目（{hiddenCount}）", "#B7A99B", ReminderCountForView("hidden")));
         if (!views.Any(x => x.Id == _currentView)) _currentView = "unclassified";
         ViewsList.ItemsSource = views;
         ViewsList.SelectedItem = views.FirstOrDefault(x => x.Id == _currentView) ?? views[0];
@@ -121,6 +125,33 @@ public partial class MainWindow : Window
         _ when _currentView.StartsWith("project:") => _data.Tasks.Where(x => x.ProjectId == _currentView[8..]),
         "hidden" => Enumerable.Empty<MemoTask>(),
         _ => _data.Tasks
+    };
+
+    private int ReminderCountForView(string viewId)
+    {
+        return _data.Tasks.Count(task => _unreadReminderTaskIds.Contains(task.Id) && !task.IsCompleted && !task.IsArchived && viewId switch
+        {
+            "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
+            "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
+            _ when viewId.StartsWith("project:") => task.ProjectId == viewId[8..],
+            _ => false
+        });
+    }
+
+    private void ViewsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source || ItemsControl.ContainerFromElement(ViewsList, source) is not ListBoxItem item || item.DataContext is not ViewOption view || view.ReminderCount == 0) return;
+        foreach (var task in _data.Tasks.Where(task => _unreadReminderTaskIds.Contains(task.Id) && IsTaskInView(task, view.Id)).ToList())
+            _unreadReminderTaskIds.Remove(task.Id);
+        BuildViews();
+    }
+
+    private bool IsTaskInView(MemoTask task, string viewId) => viewId switch
+    {
+        "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
+        "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
+        _ when viewId.StartsWith("project:") => task.ProjectId == viewId[8..],
+        _ => false
     };
 
     private void DecorateTasks(IEnumerable<MemoTask> tasks)
@@ -448,11 +479,14 @@ public partial class MainWindow : Window
         }).ToList();
         if (candidates.Count == 0) { ClearReminderState(); return; }
         if (triggered.Count == 0) return;
-        SetReminderState(triggered.Count);
+        SetReminderState(triggered);
     }
 
-    private void SetReminderState(int count)
+    private void SetReminderState(IReadOnlyCollection<MemoTask> triggered)
     {
+        foreach (var task in triggered) _unreadReminderTaskIds.Add(task.Id);
+        BuildViews();
+        var count = triggered.Count;
         Title = $"● Momo Memo ({count})";
         _tray.Icon = System.Drawing.SystemIcons.Warning;
         _tray.Text = $"Momo Memo：{count} 个任务待处理";
