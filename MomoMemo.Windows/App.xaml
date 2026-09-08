@@ -3,11 +3,41 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="AccentBrush" Color="#6C63FF"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#B96F57"/>
         <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Margin" Value="3"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="#F1E9E0"/>
+            <Setter Property="BorderBrush" Value="#E2D7CC"/>
+            <Setter Property="Foreground" Value="#4D433D"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#B96F57"/>
+            <Setter Property="BorderBrush" Value="#B96F57"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="12,9"/>
+        </Style>
+        <Style x:Key="QuietButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#F5EEE6"/>
+            <Setter Property="BorderBrush" Value="#E5D9CD"/>
+        </Style>
+        <Style x:Key="TextButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#7C675C"/>
+            <Setter Property="Padding" Value="4,1"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="3,0,0,0"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="Background" Value="#FFFCF8"/>
+            <Setter Property="BorderBrush" Value="#E7DED4"/>
         </Style>
         <Style TargetType="TextBox">
             <Setter Property="Padding" Value="7,5"/>

@@ -13,25 +13,27 @@ namespace MomoMemo;
 
 public partial class MainWindow : Window
 {
-    private sealed record ViewOption(string Id, string Title);
+    private sealed record ViewOption(string Id, string Title, string Color);
 
     private readonly StorageService _storage = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(1) };
     private readonly Forms.NotifyIcon _tray = new();
     private AppData _data = new();
-    private string _currentView = "today";
+    private string _currentView = "none";
     private string _lastReminderKey = "";
 
     public MainWindow()
     {
         InitializeComponent();
+        ViewsList.PreviewMouseRightButtonDown += Projects_RightClick;
         Loaded += MainWindow_Loaded;
-        Closing += (_, _) => _tray.Dispose();
+        Closing += (_, _) => { _storage.Save(_data); _tray.Dispose(); };
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         _data = _storage.Load();
+        _currentView = _data.Settings.LastSelectedProjectId;
         BuildViews();
         RefreshTasks();
         BuildTray();
@@ -45,12 +47,13 @@ public partial class MainWindow : Window
     {
         var views = new ObservableCollection<ViewOption>
         {
-            new("today", "今日"), new("upcoming", "未来三天"), new("longterm", "长期任务"),
-            new("inbox", "Inbox"), new("incomplete", "未完成"), new("all", "全部任务"),
-            new("completed", "已完成"), new("archived", "归档")
+            new("unclassified", "未分类任务", "#B7A99B")
         };
-        foreach (var project in _data.Projects.Where(x => x.IsActive))
-            views.Add(new($"project:{project.Id}", $"项目 · {project.Name}"));
+        foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
+            views.Add(new($"project:{project.Id}", project.Name, project.Color));
+        foreach (var project in _data.Projects.Where(x => x.IsActive && x.IsHidden))
+            views.Add(new($"hidden:{project.Id}", $"隐藏 · {project.Name}", project.Color));
+        if (!views.Any(x => x.Id == _currentView)) _currentView = "unclassified";
         ViewsList.ItemsSource = views;
         ViewsList.SelectedItem = views.FirstOrDefault(x => x.Id == _currentView) ?? views[0];
     }
@@ -62,7 +65,7 @@ public partial class MainWindow : Window
         _tray.Visible = true;
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示 Momo Memo", null, (_, _) => Dispatcher.Invoke(ShowWindow));
-        menu.Items.Add("快速添加到 Inbox", null, (_, _) => Dispatcher.Invoke(() => { ShowWindow(); QuickTitle.Focus(); }));
+        menu.Items.Add("新建任务", null, (_, _) => Dispatcher.Invoke(() => { ShowWindow(); AddTask_Click(this, new RoutedEventArgs()); }));
         menu.Items.Add("退出", null, (_, _) => Dispatcher.Invoke(Close));
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => Dispatcher.Invoke(ShowWindow);
@@ -75,38 +78,59 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private IEnumerable<MemoTask> FilterTasks()
-    {
-        var now = DateTime.Now;
-        var today = DateTime.Today;
-        var end = today.AddDays(3);
-        return _data.Tasks.Where(task => _currentView switch
-        {
-            "archived" => task.IsArchived,
-            "today" => !task.IsArchived && !task.IsCompleted && (task.IsOverdue || task.MustToday || task.StartAt?.Date == today || task.DueAt?.Date == today),
-            "upcoming" => !task.IsArchived && !task.IsCompleted && ((task.StartAt >= today && task.StartAt < end) || (task.DueAt >= now && task.DueAt < end)),
-            "longterm" => !task.IsArchived && !task.IsCompleted && task.IsLongTerm,
-            "inbox" => !task.IsArchived && task.ProjectId == "inbox",
-            "incomplete" => !task.IsArchived && !task.IsCompleted,
-            "completed" => !task.IsArchived && task.IsCompleted,
-            "all" => !task.IsArchived,
-            _ when _currentView.StartsWith("project:") => !task.IsArchived && task.ProjectId == _currentView[8..],
-            _ => false
-        });
-    }
-
     private void RefreshTasks()
     {
-        var tasks = FilterTasks()
-            .OrderBy(x => x.IsOverdue ? 0 : x.Priority == "P0" ? 1 : x.MustToday ? 2 : 3)
-            .ThenBy(x => x.Priority)
-            .ThenBy(x => x.DueAt ?? DateTime.MaxValue)
+        var today = DateTime.Today;
+        var tasks = SelectedTasks()
+            .Where(x => !x.IsArchived && !x.IsCompleted)
+            .OrderBy(x => x.IsOverdue ? -1 : x.Priority switch { "P0" => 0, "P1" => 1, "P2" => 2, _ => 3 })
+            .ThenBy(x => x.DueAt)
             .ToList();
-        TasksList.ItemsSource = null;
-        TasksList.ItemsSource = tasks;
-        var done = tasks.Count(x => x.IsCompleted);
-        SummaryText.Text = $"共 {tasks.Count} 项 · 完成 {done} · 未完成 {tasks.Count - done} · 逾期 {tasks.Count(x => x.IsOverdue)}";
-        PageTitle.Text = (ViewsList.SelectedItem as ViewOption)?.Title ?? "今日";
+        DecorateTasks(tasks);
+
+        var todayTasks = tasks.Where(x => x.DueAt!.Value.Date <= today).ToList();
+        var weekStart = StartOfWeek(today);
+        var weekEnd = weekStart.AddDays(6);
+        var weekTasks = tasks.Where(x => x.DueAt!.Value.Date >= weekStart && x.DueAt!.Value.Date <= weekEnd).ToList();
+        var longTerm = tasks.Where(x => x.DueAt!.Value.Date > weekEnd).ToList();
+        var completed = SelectedTasks().Where(x => !x.IsArchived && x.IsCompleted).OrderByDescending(x => x.CompletedAt ?? x.ModifiedAt).ToList();
+        DecorateTasks(completed);
+
+        TodayTasks.ItemsSource = todayTasks;
+        WeekTasks.ItemsSource = weekTasks;
+        LongTermTasks.ItemsSource = longTerm;
+        CompletedTasks.ItemsSource = completed;
+        TodayCountText.Text = $"{todayTasks.Count} 项";
+        WeekCountText.Text = $"{weekTasks.Count} 项";
+        LongTermCountText.Text = $"{longTerm.Count} 项";
+        SummaryText.Text = $"{tasks.Count} 项待办 · 今天 {todayTasks.Count} 项 · 逾期 {tasks.Count(x => x.IsOverdue)} 项";
+        ViewToggle_Changed(this, new RoutedEventArgs());
+    }
+
+    private IEnumerable<MemoTask> SelectedTasks() => _currentView switch
+    {
+        "none" or "unclassified" => _data.Tasks.Where(x => string.IsNullOrWhiteSpace(x.ProjectId)),
+        _ when _currentView.StartsWith("project:") => _data.Tasks.Where(x => x.ProjectId == _currentView[8..]),
+        _ when _currentView.StartsWith("hidden:") => _data.Tasks.Where(x => x.ProjectId == _currentView[7..]),
+        _ => _data.Tasks
+    };
+
+    private void DecorateTasks(IEnumerable<MemoTask> tasks)
+    {
+        var projects = _data.Projects.ToDictionary(x => x.Id);
+        foreach (var task in tasks)
+        {
+            if (projects.TryGetValue(task.ProjectId, out var project))
+            {
+                task.ProjectName = project.Name;
+                task.ProjectColor = project.Color;
+            }
+            else
+            {
+                task.ProjectName = "未分类";
+                task.ProjectColor = "#B7A99B";
+            }
+        }
     }
 
     private void SaveAndRefresh(bool rebuildViews = false)
@@ -122,15 +146,103 @@ public partial class MainWindow : Window
     {
         if (ViewsList.SelectedItem is not ViewOption view) return;
         _currentView = view.Id;
+        _data.Settings.LastSelectedProjectId = _currentView;
         if (IsLoaded) RefreshTasks();
+    }
+
+    private void ViewToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (TodayPanel is null || WeekPanel is null || LongTermPanel is null) return;
+        TodayPanel.Visibility = TodayToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        WeekPanel.Visibility = WeekToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        LongTermPanel.Visibility = LongToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void EditProjectMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var project = SelectedProject();
+        if (project is null) return;
+        var dialog = new ProjectManagerWindow(_data, project) { Owner = this };
+        if (dialog.ShowDialog() == true) SaveAndRefresh(true);
+    }
+
+    private void DeleteProjectMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var project = SelectedProject();
+        if (project is null) return;
+        var count = _data.Tasks.Count(x => x.ProjectId == project.Id);
+        var message = count == 0 ? $"删除项目“{project.Name}”吗？" : $"删除项目“{project.Name}”后，{count} 个任务将变为未分类。是否继续？";
+        if (WpfMessageBox.Show(message, "删除项目", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        foreach (var task in _data.Tasks.Where(x => x.ProjectId == project.Id)) task.ProjectId = "";
+        _data.Projects.Remove(project);
+        _currentView = _data.Projects.FirstOrDefault()?.Id is { } id ? $"project:{id}" : "none";
+        SaveAndRefresh(true);
+    }
+
+    private ProjectItem? SelectedProject()
+    {
+        var view = ViewsList.SelectedItem as ViewOption;
+        if (view?.Id.StartsWith("project:") == true) return _data.Projects.FirstOrDefault(x => x.Id == view.Id[8..]);
+        return view?.Id.StartsWith("hidden:") == true ? _data.Projects.FirstOrDefault(x => x.Id == view.Id[7..]) : null;
+    }
+
+    private void Projects_RightClick(object? sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source) return;
+        var item = ItemsControl.ContainerFromElement(ViewsList, source) as ListBoxItem;
+        if (item?.DataContext is not ViewOption view || !(view.Id.StartsWith("project:") || view.Id.StartsWith("hidden:"))) return;
+        ViewsList.SelectedItem = view;
+        var menu = new ContextMenu();
+        var edit = new MenuItem { Header = "编辑项目" };
+        edit.Click += EditProjectMenu_Click;
+        var hide = new MenuItem { Header = view.Id.StartsWith("hidden:") ? "恢复显示" : "隐藏项目" };
+        hide.Click += (_, _) => { var project = SelectedProject(); if (project is null) return; project.IsHidden = !project.IsHidden; _currentView = project.IsHidden ? "unclassified" : $"project:{project.Id}"; SaveAndRefresh(true); };
+        var delete = new MenuItem { Header = "删除项目" };
+        delete.Click += DeleteProjectMenu_Click;
+        if (!view.Id.StartsWith("hidden:")) menu.Items.Add(edit);
+        menu.Items.Add(hide);
+        menu.Items.Add(delete);
+        item.ContextMenu = menu;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private System.Windows.Point _projectDragStart;
+    private void Projects_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (_projectDragStart == default) _projectDragStart = e.GetPosition(ViewsList);
+        var position = e.GetPosition(ViewsList);
+        if (Math.Abs(position.X - _projectDragStart.X) < 8) return;
+        if (e.OriginalSource is not DependencyObject source) return;
+        var item = ItemsControl.ContainerFromElement(ViewsList, source) as ListBoxItem;
+        if (item?.DataContext is ViewOption view && view.Id.StartsWith("project:"))
+            DragDrop.DoDragDrop(item, view, System.Windows.DragDropEffects.Move);
+        _projectDragStart = default;
+    }
+
+    private void Projects_DragOver(object sender, System.Windows.DragEventArgs e) => e.Effects = e.Data.GetDataPresent(typeof(ViewOption)) ? System.Windows.DragDropEffects.Move : System.Windows.DragDropEffects.None;
+
+    private void Projects_Drop(object sender, System.Windows.DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(ViewOption)) is not ViewOption sourceView) return;
+        var targetItem = ItemsControl.ContainerFromElement(ViewsList, (DependencyObject)e.OriginalSource) as ListBoxItem;
+        if (targetItem?.DataContext is not ViewOption targetView || !targetView.Id.StartsWith("project:") || sourceView.Id == targetView.Id) return;
+        var sourceId = sourceView.Id[8..];
+        var targetId = targetView.Id[8..];
+        var sourceIndex = _data.Projects.FindIndex(x => x.Id == sourceId);
+        var targetIndex = _data.Projects.FindIndex(x => x.Id == targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+        (_data.Projects[sourceIndex], _data.Projects[targetIndex]) = (_data.Projects[targetIndex], _data.Projects[sourceIndex]);
+        SaveAndRefresh(true);
     }
 
     private void AddTask_Click(object sender, RoutedEventArgs e)
     {
         var task = new MemoTask
         {
-            ProjectId = _currentView.StartsWith("project:") ? _currentView[8..] : "inbox",
-            StartAt = _currentView == "today" ? DateTime.Now : null
+            ProjectId = _currentView.StartsWith("project:") ? _currentView[8..] : "",
+            StartAt = DateTime.Now,
         };
         var editor = new TaskEditorWindow(task, _data.Projects) { Owner = this };
         if (editor.ShowDialog() != true) return;
@@ -149,31 +261,13 @@ public partial class MainWindow : Window
     private void Complete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not System.Windows.Controls.CheckBox box || FindTask(box.Tag) is not { } task) return;
-        task.Status = box.IsChecked == true ? MemoTaskStatus.Completed : MemoTaskStatus.NotStarted;
+        task.Status = box.IsChecked == true ? MemoTaskStatus.Completed : MemoTaskStatus.InProgress;
         if (task.IsCompleted)
         {
             task.CompletedAt ??= DateTime.Now;
             task.EverCompleted = true;
         }
         task.ModifiedAt = DateTime.Now;
-        SaveAndRefresh();
-    }
-
-    private void QuickAdd_Click(object sender, RoutedEventArgs e) => QuickAdd();
-
-    private void QuickTitle_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter) QuickAdd();
-    }
-
-    private void QuickAdd()
-    {
-        var title = QuickTitle.Text.Trim();
-        if (title.Length == 0) return;
-        _data.Tasks.Add(new MemoTask { Title = title, ProjectId = "inbox" });
-        QuickTitle.Clear();
-        _currentView = "inbox";
-        BuildViews();
         SaveAndRefresh();
     }
 
@@ -219,6 +313,12 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true) SaveAndRefresh(true);
     }
 
+    private void Projects_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ProjectManagerWindow(_data) { Owner = this };
+        if (dialog.ShowDialog() == true) SaveAndRefresh(true);
+    }
+
     private void ShowStats_Click(object sender, RoutedEventArgs e)
     {
         var start = StartOfWeek(DateTime.Today);
@@ -231,22 +331,23 @@ public partial class MainWindow : Window
 
     private void Export_Click(object sender, RoutedEventArgs e)
     {
-        var all = WpfMessageBox.Show("导出全部历史？选择“否”则只导出本周。", "导出范围", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-        if (all == MessageBoxResult.Cancel) return;
-        var allHistory = all == MessageBoxResult.Yes;
-        var start = StartOfWeek(DateTime.Today);
-        var end = start.AddDays(6);
-        var tasks = allHistory ? _data.Tasks.ToList() : _data.Tasks.Where(x => (x.StartAt ?? x.CreatedAt).Date >= start && (x.StartAt ?? x.CreatedAt).Date <= end).ToList();
-        var dialog = new Microsoft.Win32.SaveFileDialog
+        var dialog = new ExportWindow(_data.Settings) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        var start = dialog.IsMonthly ? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1) : StartOfWeek(DateTime.Today);
+        var end = dialog.IsMonthly ? start.AddMonths(1).AddDays(-1) : start.AddDays(6);
+        _data.Settings.ExportDirectory = dialog.Directory;
+        _data.Settings.ExportOverwrite = dialog.Overwrite;
+        try
         {
-            Filter = "Markdown (*.md)|*.md|CSV (*.csv)|*.csv",
-            InitialDirectory = _data.Settings.ExportDirectory,
-            FileName = allHistory ? ExportService.BuildAllBaseName() : ExportService.BuildBaseName(start, end)
-        };
-        if (dialog.ShowDialog(this) != true) return;
-        File.WriteAllText(dialog.FileName, dialog.FilterIndex == 1
-            ? ExportService.ExportMarkdown(tasks, _data.Projects, allHistory ? "全部历史" : $"{start:yyyy-MM-dd} ～ {end:yyyy-MM-dd}")
-            : ExportService.ExportCsv(tasks, _data.Projects));
+            ExportRange(start, end, dialog.ExportMarkdown, dialog.ExportCsv, dialog.Directory, dialog.Overwrite,
+                "manual", dialog.IsMonthly ? "monthly" : "weekly");
+            _storage.Save(_data);
+            WpfMessageBox.Show($"已导出 {(dialog.IsMonthly ? "本月" : "本周")}工作记录。", "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            WpfMessageBox.Show(exception.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void CheckReminder()
@@ -262,7 +363,7 @@ public partial class MainWindow : Window
         if (_lastReminderKey == key) return;
         _lastReminderKey = key;
         var elapsed = (int)(now.TimeOfDay - settings.WorkStart).TotalMinutes;
-        var candidates = _data.Tasks.Where(x => !x.IsCompleted && !x.IsArchived && x.ReminderEnabled && x.ReminderRule != "None" && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
+        var candidates = _data.Tasks.Where(x => !x.IsCompleted && x.Status != MemoTaskStatus.Paused && !x.IsArchived && x.ReminderEnabled && x.ReminderRule != "None" && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
         var triggered = candidates.Where(x => x.ReminderRule switch
         {
             "Every30" => elapsed % 30 == 0,
@@ -323,25 +424,54 @@ public partial class MainWindow : Window
     {
         var settings = _data.Settings;
         var now = DateTime.Now;
-        if (!settings.AutoExportEnabled || now.ToString("HH:mm") != $"{settings.AutoExportTime:hh\\:mm}") return;
-        if (settings.AutoExportFrequency == "Weekly" && now.DayOfWeek != DayOfWeek.Friday) return;
-        if (settings.AutoExportFrequency == "Monthly" && now.Date != new DateTime(now.Year, now.Month, 1).AddMonths(1).AddDays(-1)) return;
-        var key = $"{settings.AutoExportFrequency}-{now:yyyy-MM-dd}";
-        if (settings.LastAutoExportKey == key) return;
-
-        DateTime start, end;
-        if (settings.AutoExportFrequency == "Daily") start = end = now.Date;
-        else if (settings.AutoExportFrequency == "Monthly") { start = new(now.Year, now.Month, 1); end = start.AddMonths(1).AddDays(-1); }
-        else { start = StartOfWeek(now.Date); end = start.AddDays(6); }
-        var tasks = _data.Tasks.Where(x => (x.StartAt ?? x.CreatedAt).Date >= start && (x.StartAt ?? x.CreatedAt).Date <= end).ToList();
-        var baseName = ExportService.BuildBaseName(start, end);
-        if (settings.AutoExportFormat is "Markdown" or "Both")
-            File.WriteAllText(ExportService.AvailablePath(settings.ExportDirectory, baseName, "md", settings.ExportOverwrite), ExportService.ExportMarkdown(tasks, _data.Projects, $"{start:yyyy-MM-dd} ～ {end:yyyy-MM-dd}"));
-        if (settings.AutoExportFormat is "Csv" or "Both")
-            File.WriteAllText(ExportService.AvailablePath(settings.ExportDirectory, baseName, "csv", settings.ExportOverwrite), ExportService.ExportCsv(tasks, _data.Projects));
-        settings.LastAutoExportKey = key;
+        if (!settings.AutoExportWeekly && !settings.AutoExportMonthly) return;
+        if (now.ToString("HH:mm") != $"{settings.AutoExportTime:hh\\:mm}") return;
+        if (settings.AutoExportWeekly && now.DayOfWeek == DayOfWeek.Friday)
+        {
+            var start = StartOfWeek(now.Date);
+            var key = $"weekly-{start:yyyy-MM-dd}";
+            if (settings.LastWeeklyAutoExportKey != key && TryAutoExport(start, start.AddDays(6), "weekly"))
+                settings.LastWeeklyAutoExportKey = key;
+        }
+        if (settings.AutoExportMonthly && now.Date == new DateTime(now.Year, now.Month, 1).AddMonths(1).AddDays(-1))
+        {
+            var start = new DateTime(now.Year, now.Month, 1);
+            var key = $"monthly-{start:yyyy-MM}";
+            if (settings.LastMonthlyAutoExportKey != key && TryAutoExport(start, now.Date, "monthly"))
+                settings.LastMonthlyAutoExportKey = key;
+        }
         _storage.Save(_data);
     }
+
+    private bool TryAutoExport(DateTime start, DateTime end, string period)
+    {
+        try
+        {
+            ExportRange(start, end, _data.Settings.AutoExportFormat is "Markdown" or "Both", _data.Settings.AutoExportFormat is "Csv" or "Both",
+                _data.Settings.ExportDirectory, _data.Settings.ExportOverwrite, "auto", period);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void ExportRange(DateTime start, DateTime end, bool markdown, bool csv, string directory, bool overwrite, string source, string period)
+    {
+        var tasks = _data.Tasks.Where(x => TaskDate(x).Date >= start.Date && TaskDate(x).Date <= end.Date).ToList();
+        var baseName = ExportService.BuildBaseName(start, end, source, period);
+        var rangeText = $"{start:yyyy-MM-dd} ～ {end:yyyy-MM-dd}";
+        if (markdown)
+            File.WriteAllText(ExportService.AvailablePath(directory, baseName, "md", overwrite), ExportService.ExportMarkdown(tasks, _data.Projects, rangeText));
+        if (csv)
+            File.WriteAllText(ExportService.AvailablePath(directory, baseName, "csv", overwrite), ExportService.ExportCsv(tasks, _data.Projects));
+    }
+
+    private static DateTime TaskDate(MemoTask task) => task.StartAt ?? task.DueAt ?? task.CreatedAt;
+
+    private static bool IsWithinNextThreeDays(DateTime? date, DateTime start, DateTime end) =>
+        date is not null && date.Value.Date >= start && date.Value.Date < end;
 
     private static DateTime StartOfWeek(DateTime date)
     {

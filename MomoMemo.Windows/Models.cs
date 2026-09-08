@@ -24,8 +24,11 @@ public sealed class ProjectItem
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "新项目";
     public string Description { get; set; } = "";
-    public string Color { get; set; } = "#6C63FF";
+    public string Color { get; set; } = "#C9826A";
+    public DateTime? StartDate { get; set; }
+    public DateTime? DueDate { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsHidden { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
@@ -34,11 +37,11 @@ public sealed class MemoTask
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get; set; } = "";
     public string Description { get; set; } = "";
-    public string ProjectId { get; set; } = "inbox";
-    public MemoTaskStatus Status { get; set; } = MemoTaskStatus.NotStarted;
+    public string ProjectId { get; set; } = "";
+    public MemoTaskStatus Status { get; set; } = MemoTaskStatus.InProgress;
     public string Priority { get; set; } = "P2";
     public DateTime? StartAt { get; set; }
-    public DateTime? DueAt { get; set; }
+    public DateTime? DueAt { get; set; } = DateTime.Today.AddHours(18);
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime ModifiedAt { get; set; } = DateTime.Now;
     public DateTime? CompletedAt { get; set; }
@@ -55,6 +58,9 @@ public sealed class MemoTask
     [JsonIgnore] public bool IsCompleted => Status == MemoTaskStatus.Completed;
     [JsonIgnore] public bool CanDelete => !EverCompleted && !EverArchived;
     [JsonIgnore] public bool CanSnooze => !IsCompleted && !IsArchived;
+    [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    [JsonIgnore] public string ProjectName { get; set; } = "未分类";
+    [JsonIgnore] public string ProjectColor { get; set; } = "#B7A99B";
     [JsonIgnore] public bool IsOverdue => !IsCompleted && !IsArchived && DueAt is not null && DueAt < DateTime.Now;
     [JsonIgnore] public string StatusText => IsOverdue ? "已逾期" : Status switch
     {
@@ -64,6 +70,7 @@ public sealed class MemoTask
         _ => "已完成"
     };
     [JsonIgnore] public string TimeText => $"{(StartAt is null ? "未安排" : StartAt.Value.ToString("MM-dd HH:mm"))}  ·  {(DueAt is null ? "无截止" : $"截止 {DueAt:MM-dd HH:mm}")}";
+    [JsonIgnore] public string DueText => DueAt is null ? "截止：今天" : $"截止 {DueAt:MM-dd HH:mm}";
     [JsonIgnore] public string FlagsText => string.Join("  ", new[]
     {
         MustToday ? "📌 今天必须完成" : "",
@@ -83,13 +90,15 @@ public sealed class AppSettings
     public DateTime WorkWeekAnchor { get; set; } = DateTime.Today;
     public string ReminderMode { get; set; } = "Icon";
     public bool RemindersEnabled { get; set; } = true;
-    public bool AutoExportEnabled { get; set; }
-    public string AutoExportFrequency { get; set; } = "Weekly";
+    public bool AutoExportWeekly { get; set; }
+    public bool AutoExportMonthly { get; set; }
     public TimeSpan AutoExportTime { get; set; } = new(18, 30, 0);
     public string AutoExportFormat { get; set; } = "Both";
-    public string ExportDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Momo Memo");
+    public string ExportDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "Exports");
     public bool ExportOverwrite { get; set; } = true;
-    public string LastAutoExportKey { get; set; } = "";
+    public string LastWeeklyAutoExportKey { get; set; } = "";
+    public string LastMonthlyAutoExportKey { get; set; } = "";
+    public string LastSelectedProjectId { get; set; } = "all";
 }
 
 public sealed class AppData

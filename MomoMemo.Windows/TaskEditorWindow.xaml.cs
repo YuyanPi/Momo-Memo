@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using WpfMessageBox = System.Windows.MessageBox;
 
@@ -13,8 +12,9 @@ public partial class TaskEditorWindow : Window
     {
         InitializeComponent();
         _task = task;
-        ProjectBox.ItemsSource = projects.Where(x => x.IsActive).ToList();
-        StatusBox.ItemsSource = new[] { "未开始", "进行中", "暂停", "已完成" };
+        ProjectBox.ItemsSource = new[] { new ProjectItem { Id = "", Name = "未分类" } }
+            .Concat(projects.Where(x => x.IsActive)).ToList();
+        StatusBox.ItemsSource = new[] { "进行中", "暂停", "已完成" };
         PriorityBox.ItemsSource = new[] { "P0", "P1", "P2", "P3" };
         ReminderRuleBox.ItemsSource = new[]
         {
@@ -22,16 +22,19 @@ public partial class TaskEditorWindow : Window
             new Option("Every30", "每 30 分钟"), new Option("Every60", "每 1 小时"),
             new Option("BeforeDue", "截止前 30 分钟")
         };
+        var hours = Enumerable.Range(0, 24).Select(x => x.ToString("00")).ToList();
+        var minutes = Enumerable.Range(0, 60).Select(x => x.ToString("00")).ToList();
+        StartHourBox.ItemsSource = DueHourBox.ItemsSource = hours;
+        StartMinuteBox.ItemsSource = DueMinuteBox.ItemsSource = minutes;
 
         TitleBox.Text = task.Title;
         DescriptionBox.Text = task.Description;
         ProjectBox.SelectedValue = task.ProjectId;
-        StatusBox.SelectedIndex = (int)task.Status;
+        StatusBox.SelectedIndex = task.Status == MemoTaskStatus.Paused ? 1 : task.Status == MemoTaskStatus.Completed ? 2 : 0;
         PriorityBox.SelectedItem = task.Priority;
-        StartBox.Text = Format(task.StartAt);
-        DueBox.Text = Format(task.DueAt);
-        MustTodayBox.IsChecked = task.MustToday;
-        LongTermBox.IsChecked = task.IsLongTerm;
+        SetDateTime(StartDatePicker, StartHourBox, StartMinuteBox, task.StartAt, 9, 0);
+        SetDateTime(DueDatePicker, DueHourBox, DueMinuteBox, task.DueAt, 18, 0);
+        DueDatePicker.SelectedDate ??= DateTime.Today;
         ReminderEnabledBox.IsChecked = task.ReminderEnabled;
         ReminderRuleBox.SelectedValue = task.ReminderRule;
     }
@@ -44,12 +47,9 @@ public partial class TaskEditorWindow : Window
             WpfMessageBox.Show("任务名称不能为空。", "无法保存", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (!TryDate(StartBox.Text, false, out var start) || !TryDate(DueBox.Text, true, out var due))
-        {
-            WpfMessageBox.Show("时间格式应为 yyyy-MM-dd 或 yyyy-MM-dd HH:mm，也可以留空。", "时间格式不正确", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        if (start is not null && due is not null && due < start)
+        var start = GetDateTime(StartDatePicker, StartHourBox, StartMinuteBox);
+        var due = GetDateTime(DueDatePicker, DueHourBox, DueMinuteBox) ?? DateTime.Today.AddHours(18);
+        if (start is not null && due < start)
         {
             WpfMessageBox.Show("截止时间不能早于开始时间。", "时间范围不正确", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -58,13 +58,13 @@ public partial class TaskEditorWindow : Window
         var wasCompleted = _task.IsCompleted;
         _task.Title = title;
         _task.Description = DescriptionBox.Text.Trim();
-        _task.ProjectId = ProjectBox.SelectedValue?.ToString() ?? "inbox";
-        _task.Status = (MemoTaskStatus)Math.Max(0, StatusBox.SelectedIndex);
+        _task.ProjectId = ProjectBox.SelectedValue?.ToString() ?? "";
+        _task.Status = StatusBox.SelectedIndex == 1 ? MemoTaskStatus.Paused : StatusBox.SelectedIndex == 2 ? MemoTaskStatus.Completed : MemoTaskStatus.InProgress;
         _task.Priority = PriorityBox.SelectedItem?.ToString() ?? "P2";
         _task.StartAt = start;
         _task.DueAt = due;
-        _task.MustToday = MustTodayBox.IsChecked == true;
-        _task.IsLongTerm = LongTermBox.IsChecked == true;
+        _task.MustToday = false;
+        _task.IsLongTerm = false;
         _task.ReminderEnabled = ReminderEnabledBox.IsChecked == true;
         _task.ReminderRule = ReminderRuleBox.SelectedValue?.ToString() ?? "WorkHours";
         _task.ModifiedAt = DateTime.Now;
@@ -76,15 +76,22 @@ public partial class TaskEditorWindow : Window
         DialogResult = true;
     }
 
-    private static string Format(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "";
-
-    private static bool TryDate(string value, bool endOfDayForDateOnly, out DateTime? date)
+    private static void SetDateTime(System.Windows.Controls.DatePicker picker, System.Windows.Controls.ComboBox hourBox,
+        System.Windows.Controls.ComboBox minuteBox, DateTime? value, int defaultHour, int defaultMinute)
     {
-        date = null;
-        if (string.IsNullOrWhiteSpace(value)) return true;
-        var formats = new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd" };
-        if (!DateTime.TryParseExact(value.Trim(), formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)) return false;
-        date = endOfDayForDateOnly && value.Trim().Length == 10 ? parsed.Date.AddDays(1).AddTicks(-1) : parsed;
-        return true;
+        picker.SelectedDate = value?.Date;
+        hourBox.SelectedItem = (value?.Hour ?? defaultHour).ToString("00");
+        minuteBox.SelectedItem = (value?.Minute ?? defaultMinute).ToString("00");
     }
+
+    private static DateTime? GetDateTime(System.Windows.Controls.DatePicker picker, System.Windows.Controls.ComboBox hourBox,
+        System.Windows.Controls.ComboBox minuteBox)
+    {
+        if (picker.SelectedDate is not DateTime date) return null;
+        var hour = int.Parse(hourBox.SelectedItem?.ToString() ?? "00");
+        var minute = int.Parse(minuteBox.SelectedItem?.ToString() ?? "00");
+        return date.Date.AddHours(hour).AddMinutes(minute);
+    }
+
+    private void ClearStart_Click(object sender, RoutedEventArgs e) => StartDatePicker.SelectedDate = null;
 }

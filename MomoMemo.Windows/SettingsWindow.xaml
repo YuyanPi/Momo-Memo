@@ -6,29 +6,25 @@
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="项目" FontSize="18" FontWeight="SemiBold"/>
-                <TextBlock Text="每行：项目名称|#颜色；第一行固定为 Inbox。" Foreground="#6B7280" Margin="0,3,0,3"/>
-                <TextBox x:Name="ProjectsBox" Height="105" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
-
                 <TextBlock Text="提醒" FontSize="18" FontWeight="SemiBold" Margin="0,16,0,3"/>
                 <CheckBox x:Name="RemindersEnabledBox" Content="开启提醒"/>
                 <Grid Margin="0,6,0,0">
                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                    <StackPanel><TextBlock Text="工作开始"/><TextBox x:Name="WorkStartBox" ToolTip="HH:mm"/></StackPanel>
-                    <StackPanel Grid.Column="2"><TextBlock Text="工作结束"/><TextBox x:Name="WorkEndBox" ToolTip="HH:mm"/></StackPanel>
+                    <StackPanel><TextBlock Text="工作开始"/><ComboBox x:Name="WorkStartBox"/></StackPanel>
+                    <StackPanel Grid.Column="2"><TextBlock Text="工作结束"/><ComboBox x:Name="WorkEndBox"/></StackPanel>
                 </Grid>
                 <TextBlock Text="默认提醒间隔（分钟）" Margin="0,6,0,0"/><TextBox x:Name="IntervalBox"/>
                 <TextBlock Text="提醒方式" Margin="0,6,0,0"/><ComboBox x:Name="ReminderModeBox" DisplayMemberPath="Title" SelectedValuePath="Id"/>
-                <TextBlock Text="免打扰（每行一个 HH:mm-HH:mm）" Margin="0,6,0,0"/><TextBox x:Name="QuietBox" Height="65" AcceptsReturn="True"/>
+                <TextBlock Text="免打扰时段" Margin="0,6,0,0"/><StackPanel x:Name="QuietRowsPanel"/><Button Content="＋ 添加免打扰时段" Click="AddQuiet_Click" HorizontalAlignment="Left" Margin="0,4,0,0"/>
 
                 <TextBlock Text="工作制度" FontSize="18" FontWeight="SemiBold" Margin="0,16,0,3"/>
                 <ComboBox x:Name="WorkWeekBox"/>
                 <CheckBox x:Name="AutoAlternateBox" Content="下周自动切换单双休" Margin="0,6,0,0"/>
 
                 <TextBlock Text="自动导出" FontSize="18" FontWeight="SemiBold" Margin="0,16,0,3"/>
-                <CheckBox x:Name="AutoExportBox" Content="开启自动导出"/>
-                <TextBlock Text="频率" Margin="0,6,0,0"/><ComboBox x:Name="FrequencyBox"/>
-                <TextBlock Text="导出时间" Margin="0,6,0,0"/><TextBox x:Name="ExportTimeBox" ToolTip="HH:mm"/>
+                <CheckBox x:Name="AutoExportWeeklyBox" Content="每周自动导出（周五）"/>
+                <CheckBox x:Name="AutoExportMonthlyBox" Content="每月自动导出（月末）" Margin="0,6,0,0"/>
+                <TextBlock Text="导出时间" Margin="0,6,0,0"/><ComboBox x:Name="ExportTimeBox"/>
                 <TextBlock Text="格式" Margin="0,6,0,0"/><ComboBox x:Name="FormatBox"/>
                 <CheckBox x:Name="OverwriteBox" Content="同一时间范围覆盖原文件" Margin="0,6,0,0"/>
                 <TextBlock Text="导出路径" Margin="0,6,0,0"/>

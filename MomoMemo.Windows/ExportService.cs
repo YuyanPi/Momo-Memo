@@ -37,6 +37,14 @@ public static class ExportService
                 output.AppendLine();
             }
         }
+        var uncategorized = tasks.Where(x => string.IsNullOrWhiteSpace(x.ProjectId)).ToList();
+        if (uncategorized.Count > 0)
+        {
+            output.AppendLine("## 未分类").AppendLine();
+            foreach (var task in uncategorized.OrderBy(x => x.Priority))
+                output.AppendLine($"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}（开始：{Format(task.StartAt)}；截止：{Format(task.DueAt)}）");
+            output.AppendLine();
+        }
         return output.ToString();
     }
 
@@ -48,7 +56,7 @@ public static class ExportService
         {
             string[] values =
             [
-                task.Id, task.Title, task.Description, names.GetValueOrDefault(task.ProjectId, "Inbox"), task.StatusText,
+                task.Id, task.Title, task.Description, names.GetValueOrDefault(task.ProjectId, "未分类"), task.StatusText,
                 task.Priority, Format(task.StartAt), Format(task.DueAt), Format(task.CreatedAt), Format(task.CompletedAt),
                 Format(task.ModifiedAt), YesNo(task.IsLongTerm), YesNo(task.IsOverdue), YesNo(task.IsArchived)
             ];
@@ -57,7 +65,8 @@ public static class ExportService
         return output.ToString();
     }
 
-    public static string BuildBaseName(DateTime start, DateTime end) => $"momo-memo_{start:yyyy-MM-dd}_to_{end:yyyy-MM-dd}";
+    public static string BuildBaseName(DateTime start, DateTime end, string source, string period) =>
+        $"momo-memo_{source}_{period}_{start:yyyy-MM-dd}_to_{end:yyyy-MM-dd}";
     public static string BuildAllBaseName() => $"momo-memo_all_{DateTime.Today:yyyy-MM-dd}";
 
     public static string AvailablePath(string directory, string baseName, string extension, bool overwrite)

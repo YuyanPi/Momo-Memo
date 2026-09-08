@@ -44,26 +44,23 @@ public sealed class StorageService
         Backup();
     }
 
-    private AppData CreateDefault() => new()
-    {
-        Projects =
-        [
-            new ProjectItem { Id = "inbox", Name = "Inbox", Color = "#6C63FF" }
-        ]
-    };
+    private AppData CreateDefault() => new();
 
     private static void Normalize(AppData data)
     {
         data.Projects ??= [];
         data.Tasks ??= [];
         data.Settings ??= new AppSettings();
-        if (data.Projects.All(x => x.Id != "inbox"))
-            data.Projects.Insert(0, new ProjectItem { Id = "inbox", Name = "Inbox" });
+        data.Projects.RemoveAll(x => x.Id == "inbox");
 
         var validProjects = data.Projects.Select(x => x.Id).ToHashSet();
         foreach (var task in data.Tasks)
         {
-            if (!validProjects.Contains(task.ProjectId)) task.ProjectId = "inbox";
+            if (task.Status == MemoTaskStatus.NotStarted) task.Status = MemoTaskStatus.InProgress;
+            if (task.ProjectId == "inbox" || !validProjects.Contains(task.ProjectId)) task.ProjectId = "";
+            task.DueAt ??= DateTime.Today.AddHours(18);
+            task.MustToday = false;
+            task.IsLongTerm = false;
             if (task.Status == MemoTaskStatus.Completed && task.CompletedAt is null) task.CompletedAt = task.ModifiedAt;
             if (task.Status == MemoTaskStatus.Completed) task.EverCompleted = true;
             if (task.IsArchived) task.EverArchived = true;
