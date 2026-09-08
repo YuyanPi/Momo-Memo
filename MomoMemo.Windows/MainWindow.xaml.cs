@@ -559,7 +559,9 @@ public partial class MainWindow : Window
 
     private void ExportRange(DateTime start, DateTime end, bool markdown, bool csv, string directory, bool overwrite, string source, string period)
     {
-        var tasks = _data.Tasks.Where(x => TaskDate(x).Date >= start.Date && TaskDate(x).Date <= end.Date).ToList();
+        var tasks = _data.Tasks.Where(x =>
+            (TaskDate(x).Date >= start.Date && TaskDate(x).Date <= end.Date) ||
+            (x.IsCompleted && x.CompletedAt is not null && x.CompletedAt.Value.Date >= start.Date && x.CompletedAt.Value.Date <= end.Date)).ToList();
         var baseName = ExportService.BuildBaseName(start, end, source, period);
         var rangeText = $"{start:yyyy-MM-dd} ～ {end:yyyy-MM-dd}";
         if (markdown)

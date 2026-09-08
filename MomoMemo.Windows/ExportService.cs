@@ -27,13 +27,20 @@ public static class ExportService
             var projectTasks = tasks.Where(x => x.ProjectId == project.Id).ToList();
             if (projectTasks.Count == 0) continue;
             output.AppendLine($"## {project.Name}").AppendLine();
-            foreach (var status in new[] { "已逾期", "进行中", "暂停", "未开始", "已完成" })
+            foreach (var (status, predicate) in new (string Status, Func<MemoTask, bool> Predicate)[]
             {
-                var statusTasks = projectTasks.Where(x => x.StatusText == status).OrderBy(x => x.Priority).ToList();
+                ("已逾期", x => x.IsOverdue),
+                ("进行中", x => !x.IsOverdue && x.Status == MemoTaskStatus.InProgress),
+                ("暂停", x => x.Status == MemoTaskStatus.Paused),
+                ("未开始", x => x.Status == MemoTaskStatus.NotStarted),
+                ("已完成", x => x.IsCompleted)
+            })
+            {
+                var statusTasks = projectTasks.Where(predicate).OrderBy(x => x.Priority).ToList();
                 if (statusTasks.Count == 0) continue;
                 output.AppendLine($"### {status}").AppendLine();
                 foreach (var task in statusTasks)
-                    output.AppendLine($"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}（开始：{Format(task.StartAt)}；截止：{Format(task.DueAt)}）");
+                    output.AppendLine(TaskLine(task));
                 output.AppendLine();
             }
         }
@@ -42,7 +49,7 @@ public static class ExportService
         {
             output.AppendLine("## 未分类").AppendLine();
             foreach (var task in uncategorized.OrderBy(x => x.Priority))
-                output.AppendLine($"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}（开始：{Format(task.StartAt)}；截止：{Format(task.DueAt)}）");
+                output.AppendLine(TaskLine(task));
             output.AppendLine();
         }
         return output.ToString();
@@ -82,6 +89,7 @@ public static class ExportService
     }
 
     private static string Escape(string? value) => $"\"{(value ?? "").Replace("\"", "\"\"")}\"";
+    private static string TaskLine(MemoTask task) => $"- {(task.IsCompleted ? "[x]" : "[ ]")} [{task.Priority}] {task.Title}（开始：{Format(task.StartAt)}；截止：{Format(task.DueAt)}{(task.IsCompleted ? $"；完成：{Format(task.CompletedAt)}" : "")}）";
     private static string Format(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "未设置";
     private static string Format(DateTime value) => value.ToString("yyyy-MM-dd HH:mm");
     private static string YesNo(bool value) => value ? "是" : "否";
