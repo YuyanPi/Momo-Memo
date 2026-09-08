@@ -108,7 +108,10 @@ public partial class MainWindow : Window
         TodayCountText.Text = $"{todayTasks.Count} 项";
         WeekCountText.Text = $"{weekTasks.Count} 项";
         LongTermCountText.Text = $"{longTerm.Count} 项";
-        SummaryText.Text = $"{tasks.Count} 项待办 · 今天 {todayTasks.Count} 项 · 逾期 {tasks.Count(x => x.IsOverdue)} 项";
+        var visibleTasks = SelectedTasks().Where(x => !x.IsArchived).ToList();
+        var todayCompleted = visibleTasks.Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date == today);
+        var weekCompleted = visibleTasks.Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date >= weekStart && (x.CompletedAt ?? x.ModifiedAt).Date <= weekEnd);
+        SummaryText.Text = $"今天已完成 {todayCompleted} 项 · 本周已完成 {weekCompleted} 项 · 逾期 {tasks.Count(x => x.IsOverdue)} 项";
         ViewToggle_Changed(this, new RoutedEventArgs());
     }
 
@@ -295,6 +298,40 @@ public partial class MainWindow : Window
         if (task.IsCompleted)
         {
             task.CompletedAt ??= DateTime.Now;
+            task.EverCompleted = true;
+        }
+        task.ModifiedAt = DateTime.Now;
+        SaveAndRefresh();
+    }
+
+    private void StatusMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button || FindTask(button.Tag) is not { } task) return;
+        var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        foreach (var (status, title) in new[]
+        {
+            (MemoTaskStatus.InProgress, "进行中"), (MemoTaskStatus.Paused, "暂停"), (MemoTaskStatus.Completed, "已完成")
+        })
+        {
+            var item = new MenuItem { Header = title, IsCheckable = true, IsChecked = task.Status == status };
+            item.Click += (_, _) => UpdateTaskStatus(task, status);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
+
+    private void RestoreTask_Click(object sender, RoutedEventArgs e)
+    {
+        if (FindTask((sender as FrameworkElement)?.Tag) is { } task) UpdateTaskStatus(task, MemoTaskStatus.InProgress);
+    }
+
+    private void UpdateTaskStatus(MemoTask task, MemoTaskStatus status)
+    {
+        if (task.Status == status) return;
+        task.Status = status;
+        if (status == MemoTaskStatus.Completed)
+        {
+            task.CompletedAt = DateTime.Now;
             task.EverCompleted = true;
         }
         task.ModifiedAt = DateTime.Now;
