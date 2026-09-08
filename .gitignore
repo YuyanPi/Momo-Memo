@@ -3,3 +3,6 @@ artifacts/
 build/
 *.app
 *.zip
+bin/
+obj/
+.vs/

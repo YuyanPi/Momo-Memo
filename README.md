@@ -1,70 +1,65 @@
 # Momo Memo
 
-Momo Memo 是一个 macOS 桌面任务便利贴应用。目标是简单、直观、常驻桌面：快速记下今天要做的事，按项目查看，按周导出。
+Momo Memo 是一个面向 Windows 的本地优先个人工作备忘与任务管理工具。
 
-## 当前功能
+> 记录每一件事，只把现在重要的事情留在你面前。
 
-- 便利贴样式主窗口：无边框、圆角、可拖动、默认置顶、可隐藏到菜单栏
-- 任务创建、编辑、删除、完成、置顶
-- 项目分区：名称、颜色、是否允许重复任务
-- 标签：创建和颜色记录，任务支持多个标签
-- 子任务：用逗号快速录入，卡片中显示
-- 日期字段：任务日期、开始日期、完成日期、截止日期
-- 优先级：高、中、低
-- 重复任务：每日、每周、每月、自定义；由项目开关控制
-- 菜单栏快速添加任务
-- 今日任务提醒：默认 10:00-18:00，仅菜单栏高亮，不弹窗、不发声
-- 免打扰时段：支持多行配置，例如 `12:00-13:30`
-- 本周统计：总数、完成数、未完成数、项目完成比例
-- 本周导出：Markdown 或 CSV
-- 本地 JSON 保存与自动备份，保留最近 7 份
+## 第一版功能
 
-## 构建
+- 今日、未来三天、长期任务、Inbox、未完成、全部、已完成、归档和项目视图
+- 创建、编辑、完成、恢复、归档、延后与受控删除任务
+- 未开始、进行中、暂停、已完成状态，以及自动识别逾期
+- P0～P3 优先级、开始/截止时间、“今天必须完成”和长期任务
+- 已完成任务与曾归档任务永久保留，只有错误创建的普通未完成任务可真正删除
+- 项目管理；系统托盘快速记录默认进入 Inbox
+- 工作时间、双休/单休周、本周制度、自动单双周切换和免打扰
+- 任务级整点、30 分钟、1 小时、截止前提醒，以及延后提醒
+- 低干扰任务栏/托盘图标提醒，可选系统通知、桌面提示、声音或组合
+- 本周完成率、逾期、项目和优先级统计
+- 本周或全部历史手动导出，支持结构化 Markdown 和稳定字段 CSV
+- 每天、每周或每月自动导出，可配置路径、格式及覆盖/版本化
+- 本地 JSON 原子保存；自动保留最近 7 份备份
 
-macOS 13 或更高版本可直接构建，不需要安装 .NET 或第三方依赖。
+第二阶段的日历视图、高级搜索/筛选、趋势分析和自然语言录入，以及第三阶段的 AI、同步与多端能力不在当前版本范围内。
 
-```bash
-zsh ./scripts/build-macos.sh
-open "artifacts/macos/Momo Memo.app"
+## Windows 构建与运行
+
+要求：Windows 10/11 与 .NET 8 SDK（仅运行构建产物时需要 .NET 8 Desktop Runtime）。
+
+```powershell
+dotnet build .\MomoMemo.sln -c Release
+& '.\MomoMemo.Windows\bin\Release\net8.0-windows\MomoMemo.exe'
 ```
 
-## 安装
+生成单文件 Windows x64 包：
 
-构建后把 `artifacts/macos/Momo Memo.app` 拖到 `/Applications` 或 `~/Applications` 即可。
-
-也可以在 GitHub Actions 中下载 `Momo-Memo-macOS.zip`，解压后直接运行。
+```powershell
+dotnet publish .\MomoMemo.Windows\MomoMemo.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o .\artifacts\windows
+```
 
 ## 数据位置
 
 任务数据保存在：
 
 ```text
-~/Library/Application Support/Momo Memo/momo-memo.json
+%LOCALAPPDATA%\Momo Memo\momo-memo.json
 ```
 
-自动备份保存在：
+最近 7 份自动备份保存在：
 
 ```text
-~/Library/Application Support/Momo Memo/Backups
+%LOCALAPPDATA%\Momo Memo\Backups
 ```
 
-## 发布
+自动导出默认保存在：
 
-推送到 `main` 会自动构建 macOS 压缩包。推送形如 `v1.0.0` 的 tag 会自动创建 GitHub Release 并上传 `Momo-Memo-macOS.zip`。
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
+```text
+%USERPROFILE%\Documents\Momo Memo
 ```
 
-## 设计原则
+## macOS 原型
 
-Momo Memo 不追求复杂项目管理，而是优先保证日常使用路径短：
-
-- 快速添加只填标题即可
-- 常用字段集中在一个编辑弹窗
-- 项目、标签、提醒放进设置
-- 提醒默认不打扰，只让菜单栏轻微高亮
+仓库仍保留原有 `MomoMemoMac` 原型和 `scripts/build-macos.sh`，但当前第一版开发与验证目标是 Windows WPF 应用。
 
 ## License
 
