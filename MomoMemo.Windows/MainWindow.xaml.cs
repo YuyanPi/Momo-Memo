@@ -335,11 +335,36 @@ public partial class MainWindow : Window
         SaveAndRefresh();
     }
 
-    private void StatusCycle_Click(object sender, RoutedEventArgs e)
+    private void StatusMenu_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button button || FindTask(button.Tag) is not { } task) return;
-        var nextStatus = task.Status == MemoTaskStatus.InProgress ? MemoTaskStatus.Paused : MemoTaskStatus.Completed;
-        UpdateTaskStatus(task, nextStatus);
+        var menu = new ContextMenu
+        {
+            PlacementTarget = button,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            Background = System.Windows.Media.Brushes.White,
+            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 215, 204)),
+            Padding = new Thickness(4)
+        };
+        foreach (var (status, title, marker) in new[]
+        {
+            (MemoTaskStatus.InProgress, "进行中", "●"),
+            (MemoTaskStatus.Paused, "暂停", "Ⅱ"),
+            (MemoTaskStatus.Completed, "已完成", "✓")
+        })
+        {
+            var item = new MenuItem
+            {
+                Header = $"{marker}  {title}",
+                IsCheckable = true,
+                IsChecked = task.Status == status,
+                Padding = new Thickness(12, 6, 18, 6),
+                FontSize = 12
+            };
+            item.Click += (_, _) => UpdateTaskStatus(task, status);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
     }
 
     private void RestoreTask_Click(object sender, RoutedEventArgs e)
