@@ -13,8 +13,7 @@ public sealed class StorageService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public string DataDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Momo Memo");
+    public string DataDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "Data");
     public string DataPath => Path.Combine(DataDirectory, "momo-memo.json");
 
     public AppData Load()

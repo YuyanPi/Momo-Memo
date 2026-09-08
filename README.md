@@ -39,16 +39,16 @@ dotnet publish .\MomoMemo.Windows\MomoMemo.Windows.csproj -c Release -r win-x64 
 
 ## 数据位置
 
-任务数据保存在：
+任务数据随程序保存在便携目录：
 
 ```text
-%LOCALAPPDATA%\Momo Memo\momo-memo.json
+<程序目录>\Data\momo-memo.json
 ```
 
 最近 7 份自动备份保存在：
 
 ```text
-%LOCALAPPDATA%\Momo Memo\Backups
+<程序目录>\Data\Backups
 ```
 
 自动导出默认保存在：
