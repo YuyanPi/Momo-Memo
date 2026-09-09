@@ -379,7 +379,9 @@ public partial class MainWindow : Window
         {
             var item = new MenuItem
             {
-                Header = $"{marker}  {title}",
+                Header = status == MemoTaskStatus.InProgress && task.IsOverdue
+                    ? $"{marker}  {title}（截止顺延一天）"
+                    : $"{marker}  {title}",
                 IsCheckable = true,
                 IsChecked = task.Status == status,
                 Padding = new Thickness(12, 6, 18, 6),
@@ -398,6 +400,19 @@ public partial class MainWindow : Window
 
     private void UpdateTaskStatus(MemoTask task, MemoTaskStatus status)
     {
+        // "已逾期" is a calculated display state.  The underlying task is often
+        // already InProgress, so selecting InProgress must still restore it by
+        // moving its deadline forward.
+        if (status == MemoTaskStatus.InProgress && task.IsOverdue)
+        {
+            task.Status = MemoTaskStatus.InProgress;
+            task.DueAt = task.DueAt!.Value.AddDays(1);
+            task.BeforeDueReminderFor = null;
+            task.ModifiedAt = DateTime.Now;
+            SaveAndRefresh();
+            return;
+        }
+
         if (task.Status == status) return;
         task.Status = status;
         if (status == MemoTaskStatus.Completed)
