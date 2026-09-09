@@ -435,9 +435,9 @@ public partial class MainWindow : Window
     {
         var task = FindTask(id);
         if (task is null) return;
-        if (task.EverCompleted || task.EverArchived)
+        if (task.IsCompleted || task.IsArchived)
         {
-            WpfMessageBox.Show("曾完成或曾归档的任务属于永久记录，只能编辑或恢复显示。", "不能删除", MessageBoxButton.OK, MessageBoxImage.Information);
+            WpfMessageBox.Show("请先恢复已完成或已归档的任务，再执行删除。", "不能删除", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (WpfMessageBox.Show($"确定真正删除“{task.Title}”吗？", "删除错误任务", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;

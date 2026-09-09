@@ -59,7 +59,7 @@ public sealed class MemoTask
     public DateTime? SnoozedUntil { get; set; }
 
     [JsonIgnore] public bool IsCompleted => Status == MemoTaskStatus.Completed;
-    [JsonIgnore] public bool CanDelete => !EverCompleted && !EverArchived;
+    [JsonIgnore] public bool CanDelete => !IsCompleted && !IsArchived;
     [JsonIgnore] public bool CanSnooze => !IsCompleted && !IsArchived;
     [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     [JsonIgnore] public string ProjectName { get; set; } = "未分类";
