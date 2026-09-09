@@ -10,7 +10,4 @@
     <RootNamespace>MomoMemo</RootNamespace>
     <ApplicationIcon>Assets\MomoMemoIcon.ico</ApplicationIcon>
   </PropertyGroup>
-  <ItemGroup>
-    <Resource Include="Assets\MomoMemoIcon.png" />
-  </ItemGroup>
 </Project>
