@@ -8,5 +8,6 @@
     <Nullable>enable</Nullable>
     <AssemblyName>MomoMemo</AssemblyName>
     <RootNamespace>MomoMemo</RootNamespace>
+    <ApplicationIcon>Assets\MomoMemoIcon.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>

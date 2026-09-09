@@ -71,7 +71,7 @@ public partial class MainWindow : Window
 
     private void BuildTray()
     {
-        _tray.Icon = System.Drawing.SystemIcons.Application;
+        _tray.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? "") ?? System.Drawing.SystemIcons.Application;
         _tray.Text = "Momo Memo";
         _tray.Visible = true;
         var menu = new Forms.ContextMenuStrip();
