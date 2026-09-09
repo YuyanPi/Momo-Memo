@@ -30,6 +30,9 @@ public partial class SettingsWindow : Window
         WorkStartBox.SelectedItem = $"{data.Settings.WorkStart:hh\\:mm}";
         WorkEndBox.SelectedItem = $"{data.Settings.WorkEnd:hh\\:mm}";
         IntervalBox.Text = data.Settings.ReminderIntervalMinutes.ToString();
+        DefaultWorkHoursReminderBox.IsChecked = data.Settings.DefaultWorkHoursReminderEnabled;
+        DefaultBeforeDueReminderBox.IsChecked = data.Settings.DefaultBeforeDueReminderEnabled;
+        BeforeDueMinutesBox.Text = data.Settings.BeforeDueReminderMinutes.ToString();
         ReminderModeBox.ItemsSource = _reminderModes;
         ReminderModeBox.SelectedValue = data.Settings.ReminderMode;
         foreach (var range in data.Settings.QuietRanges.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) AddQuietRow(range);
@@ -86,11 +89,19 @@ public partial class SettingsWindow : Window
             WpfMessageBox.Show("提醒间隔不能少于 30 分钟。", "设置格式不正确", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        if (!int.TryParse(BeforeDueMinutesBox.Text, out var beforeDueMinutes) || beforeDueMinutes < 1)
+        {
+            WpfMessageBox.Show("截止前提醒时间必须是大于 0 的分钟数。", "设置格式不正确", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var settings = _data.Settings;
         settings.RemindersEnabled = RemindersEnabledBox.IsChecked == true;
         settings.WorkStart = workStart;
         settings.WorkEnd = workEnd;
         settings.ReminderIntervalMinutes = interval;
+        settings.DefaultWorkHoursReminderEnabled = DefaultWorkHoursReminderBox.IsChecked == true;
+        settings.DefaultBeforeDueReminderEnabled = DefaultBeforeDueReminderBox.IsChecked == true;
+        settings.BeforeDueReminderMinutes = beforeDueMinutes;
         settings.ReminderMode = ReminderModeBox.SelectedValue?.ToString() ?? "Icon";
         settings.QuietRanges = string.Join("\n", _quietRows.Select(x => $"{x.Start.SelectedItem}-{x.End.SelectedItem}"));
         var newWeekMode = WorkWeekBox.SelectedIndex == 1 ? WorkWeekMode.SingleRest : WorkWeekMode.DoubleRest;

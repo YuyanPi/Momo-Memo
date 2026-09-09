@@ -20,6 +20,7 @@ public partial class MainWindow : Window
 
     private readonly StorageService _storage = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(1) };
+    private readonly DispatcherTimer _quickAddFeedbackTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Forms.NotifyIcon _tray = new();
     private AppData _data = new();
     private string _currentView = "none";
@@ -29,6 +30,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _quickAddFeedbackTimer.Tick += (_, _) =>
+        {
+            QuickAddFeedbackText.Text = "";
+            _quickAddFeedbackTimer.Stop();
+        };
         ViewsList.PreviewMouseRightButtonDown += Projects_RightClick;
         Loaded += MainWindow_Loaded;
         Closing += (_, _) => { _storage.Save(_data); _tray.Dispose(); };
@@ -71,6 +77,7 @@ public partial class MainWindow : Window
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示 Momo Memo", null, (_, _) => Dispatcher.Invoke(ShowWindow));
         menu.Items.Add("新建任务", null, (_, _) => Dispatcher.Invoke(() => { ShowWindow(); AddTask_Click(this, new RoutedEventArgs()); }));
+        menu.Items.Add("快速录入", null, (_, _) => Dispatcher.Invoke(() => { ShowWindow(); QuickAdd_Click(this, new RoutedEventArgs()); }));
         menu.Items.Add("退出", null, (_, _) => Dispatcher.Invoke(Close));
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => Dispatcher.Invoke(ShowWindow);
@@ -93,11 +100,11 @@ public partial class MainWindow : Window
             .ToList();
         DecorateTasks(tasks);
 
-        var todayTasks = tasks.Where(x => x.DueAt!.Value.Date <= today).ToList();
+        var todayTasks = tasks.Where(x => x.DueAt is not null && x.DueAt.Value.Date <= today).ToList();
         var weekStart = StartOfWeek(today);
         var weekEnd = weekStart.AddDays(6);
-        var weekTasks = tasks.Where(x => x.DueAt!.Value.Date >= weekStart && x.DueAt!.Value.Date <= weekEnd).ToList();
-        var longTerm = tasks.Where(x => x.DueAt!.Value.Date > weekEnd).ToList();
+        var weekTasks = tasks.Where(x => x.DueAt is not null && x.DueAt.Value.Date >= weekStart && x.DueAt.Value.Date <= weekEnd).ToList();
+        var longTerm = tasks.Where(x => x.DueAt is null || x.DueAt.Value.Date > weekEnd).ToList();
         var completed = SelectedTasks().Where(x => !x.IsArchived && x.IsCompleted).OrderByDescending(x => x.CompletedAt ?? x.ModifiedAt).ToList();
         DecorateTasks(completed);
 
@@ -300,11 +307,28 @@ public partial class MainWindow : Window
         {
             ProjectId = _currentView.StartsWith("project:") ? _currentView[8..] : "",
             StartAt = DateTime.Now,
+            ReminderEnabled = _data.Settings.DefaultWorkHoursReminderEnabled || _data.Settings.DefaultBeforeDueReminderEnabled,
+            ReminderRule = _data.Settings.DefaultWorkHoursReminderEnabled ? "WorkHours" : "None",
+            BeforeDueReminderEnabled = _data.Settings.DefaultBeforeDueReminderEnabled,
         };
-        var editor = new TaskEditorWindow(task, _data.Projects) { Owner = this };
+        var editor = new TaskEditorWindow(task, _data.Projects, _data.Settings) { Owner = this };
         if (editor.ShowDialog() != true) return;
         _data.Tasks.Add(task);
         SaveAndRefresh();
+    }
+
+    private void QuickAdd_Click(object sender, RoutedEventArgs e)
+    {
+        var currentProjectId = _currentView.StartsWith("project:") ? _currentView[8..] : "";
+        var dialog = new NaturalLanguageTaskWindow(_data.Projects, currentProjectId, _data.Settings) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.CreatedTask is null) return;
+        _data.Tasks.Add(dialog.CreatedTask);
+        SaveAndRefresh();
+        var projectName = _data.Projects.FirstOrDefault(x => x.Id == dialog.CreatedTask.ProjectId)?.Name ?? "未分类";
+        var dueText = dialog.CreatedTask.DueAt is null ? "未设置截止时间" : $"截止 {dialog.CreatedTask.DueAt:MM-dd HH:mm}";
+        QuickAddFeedbackText.Text = $"已添加至 {projectName} · {dueText}";
+        _quickAddFeedbackTimer.Stop();
+        _quickAddFeedbackTimer.Start();
     }
 
     private void EditTask_Click(object sender, RoutedEventArgs e)
@@ -318,7 +342,7 @@ public partial class MainWindow : Window
     {
         var task = FindTask(id);
         if (task is null) return;
-        var editor = new TaskEditorWindow(task, _data.Projects) { Owner = this };
+        var editor = new TaskEditorWindow(task, _data.Projects, _data.Settings) { Owner = this };
         if (editor.ShowDialog() == true) SaveAndRefresh();
     }
 
@@ -485,18 +509,25 @@ public partial class MainWindow : Window
         if (_lastReminderKey == key) return;
         _lastReminderKey = key;
         var elapsed = (int)(now.TimeOfDay - settings.WorkStart).TotalMinutes;
-        var candidates = _data.Tasks.Where(x => !x.IsCompleted && x.Status != MemoTaskStatus.Paused && !x.IsArchived && x.ReminderEnabled && x.ReminderRule != "None" && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
-        var triggered = candidates.Where(x => x.ReminderRule switch
-        {
-            "Every30" => elapsed % 30 == 0,
-            "Every60" => elapsed % 60 == 0,
-            "BeforeDue" => x.DueAt is not null && x.DueAt >= now && x.DueAt <= now.AddMinutes(30),
-            _ => elapsed % Math.Max(30, settings.ReminderIntervalMinutes) == 0
-        }).ToList();
+        var candidates = _data.Tasks.Where(x => !x.IsCompleted && x.Status != MemoTaskStatus.Paused && !x.IsArchived && x.ReminderEnabled && (x.ReminderRule != "None" || x.BeforeDueReminderEnabled) && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
+        var triggered = candidates.Where(x => IsWorkHoursReminderDue(x, elapsed, settings) || IsBeforeDueReminderDue(x, now, settings)).ToList();
         if (candidates.Count == 0) { ClearReminderState(); return; }
         if (triggered.Count == 0) return;
+        foreach (var task in triggered.Where(x => IsBeforeDueReminderDue(x, now, settings))) task.BeforeDueReminderFor = task.DueAt;
+        _storage.Save(_data);
         SetReminderState(triggered);
     }
+
+    private static bool IsWorkHoursReminderDue(MemoTask task, int elapsed, AppSettings settings) => task.ReminderRule switch
+    {
+        "Every30" => elapsed % 30 == 0,
+        "Every60" => elapsed % 60 == 0,
+        "WorkHours" => elapsed % Math.Max(30, settings.ReminderIntervalMinutes) == 0,
+        _ => false
+    };
+
+    private static bool IsBeforeDueReminderDue(MemoTask task, DateTime now, AppSettings settings) =>
+        task.BeforeDueReminderEnabled && task.DueAt is not null && task.BeforeDueReminderFor != task.DueAt && task.DueAt > now && task.DueAt <= now.AddMinutes(settings.BeforeDueReminderMinutes);
 
     private void SetReminderState(IReadOnlyCollection<MemoTask> triggered)
     {

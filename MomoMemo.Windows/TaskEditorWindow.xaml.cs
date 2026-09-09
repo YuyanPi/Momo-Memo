@@ -7,20 +7,21 @@ public partial class TaskEditorWindow : Window
 {
     private sealed record Option(string Id, string Title);
     private readonly MemoTask _task;
+    private readonly AppSettings _settings;
 
-    public TaskEditorWindow(MemoTask task, IReadOnlyList<ProjectItem> projects)
+    public TaskEditorWindow(MemoTask task, IReadOnlyList<ProjectItem> projects, AppSettings settings)
     {
         InitializeComponent();
         _task = task;
+        _settings = settings;
         ProjectBox.ItemsSource = new[] { new ProjectItem { Id = "", Name = "未分类" } }
             .Concat(projects.Where(x => x.IsActive)).ToList();
         StatusBox.ItemsSource = new[] { "进行中", "暂停", "已完成" };
         PriorityBox.ItemsSource = new[] { "P0", "P1", "P2", "P3" };
         ReminderRuleBox.ItemsSource = new[]
         {
-            new Option("None", "不提醒"), new Option("WorkHours", "工作时间定时提醒"),
-            new Option("Every30", "每 30 分钟"), new Option("Every60", "每 1 小时"),
-            new Option("BeforeDue", "截止前 30 分钟")
+            new Option("None", "不启用工作时间提醒"), new Option("WorkHours", "工作时间定时提醒"),
+            new Option("Every30", "每 30 分钟"), new Option("Every60", "每 1 小时")
         };
         var hours = Enumerable.Range(0, 24).Select(x => x.ToString("00")).ToList();
         var minutes = Enumerable.Range(0, 60).Select(x => x.ToString("00")).ToList();
@@ -37,6 +38,8 @@ public partial class TaskEditorWindow : Window
         DueDatePicker.SelectedDate ??= DateTime.Today;
         ReminderEnabledBox.IsChecked = task.ReminderEnabled;
         ReminderRuleBox.SelectedValue = task.ReminderRule;
+        BeforeDueReminderEnabledBox.Content = $"截止前 {_settings.BeforeDueReminderMinutes} 分钟提醒一次";
+        BeforeDueReminderEnabledBox.IsChecked = task.BeforeDueReminderEnabled;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -56,6 +59,7 @@ public partial class TaskEditorWindow : Window
         }
 
         var wasCompleted = _task.IsCompleted;
+        var previousDue = _task.DueAt;
         _task.Title = title;
         _task.Description = DescriptionBox.Text.Trim();
         _task.ProjectId = ProjectBox.SelectedValue?.ToString() ?? "";
@@ -67,6 +71,8 @@ public partial class TaskEditorWindow : Window
         _task.IsLongTerm = false;
         _task.ReminderEnabled = ReminderEnabledBox.IsChecked == true;
         _task.ReminderRule = ReminderRuleBox.SelectedValue?.ToString() ?? "WorkHours";
+        _task.BeforeDueReminderEnabled = BeforeDueReminderEnabledBox.IsChecked == true;
+        if (previousDue != due) _task.BeforeDueReminderFor = null;
         _task.ModifiedAt = DateTime.Now;
         if (_task.IsCompleted)
         {

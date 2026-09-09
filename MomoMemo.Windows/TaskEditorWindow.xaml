@@ -37,8 +37,9 @@
                     <ComboBox x:Name="DueMinuteBox" Grid.Column="2" Margin="0,3,5,3"/>
                 </Grid>
                 <CheckBox x:Name="ReminderEnabledBox" Content="参与提醒" Margin="0,6,0,0"/>
-                <TextBlock Text="提醒规则" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                <TextBlock Text="工作时间提醒规则" FontWeight="SemiBold" Margin="0,8,0,0"/>
                 <ComboBox x:Name="ReminderRuleBox" DisplayMemberPath="Title" SelectedValuePath="Id"/>
+                <CheckBox x:Name="BeforeDueReminderEnabledBox" Margin="0,6,0,0"/>
             </StackPanel>
         </ScrollViewer>
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">

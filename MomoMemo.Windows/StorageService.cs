@@ -4,6 +4,28 @@ using System.IO;
 
 namespace MomoMemo;
 
+/// <summary>
+/// Keeps user data outside the replaceable application folder when a portable release is placed
+/// under &lt;root&gt;\App.  For example, D:\MomoMemo\App\MomoMemo.exe stores data in D:\MomoMemo\Data.
+/// </summary>
+public static class AppStoragePaths
+{
+    public static string ApplicationDirectory { get; } = Path.GetFullPath(AppContext.BaseDirectory);
+    public static string RootDirectory
+    {
+        get
+        {
+            var application = new DirectoryInfo(ApplicationDirectory);
+            return application.Name.Equals("App", StringComparison.OrdinalIgnoreCase) && application.Parent is not null
+                ? application.Parent.FullName
+                : application.FullName;
+        }
+    }
+
+    public static string DataDirectory => Path.Combine(RootDirectory, "Data");
+    public static string ExportsDirectory => Path.Combine(RootDirectory, "Exports");
+}
+
 public sealed class StorageService
 {
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -13,7 +35,7 @@ public sealed class StorageService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public string DataDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "Data");
+    public string DataDirectory { get; } = AppStoragePaths.DataDirectory;
     public string DataPath => Path.Combine(DataDirectory, "momo-memo.json");
 
     public AppData Load()
@@ -58,7 +80,11 @@ public sealed class StorageService
         {
             if (task.Status == MemoTaskStatus.NotStarted) task.Status = MemoTaskStatus.InProgress;
             if (task.ProjectId == "inbox" || !validProjects.Contains(task.ProjectId)) task.ProjectId = "";
-            task.DueAt ??= DateTime.Today.AddHours(18);
+            if (task.ReminderRule == "BeforeDue")
+            {
+                task.ReminderRule = "None";
+                task.BeforeDueReminderEnabled = true;
+            }
             task.MustToday = false;
             task.IsLongTerm = false;
             if (task.Status == MemoTaskStatus.Completed && task.CompletedAt is null) task.CompletedAt = task.ModifiedAt;

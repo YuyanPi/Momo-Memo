@@ -53,6 +53,9 @@ public sealed class MemoTask
     public DateTime? ArchivedAt { get; set; }
     public bool ReminderEnabled { get; set; } = true;
     public string ReminderRule { get; set; } = "WorkHours";
+    public bool BeforeDueReminderEnabled { get; set; }
+    /// <summary>The deadline for which the one-time pre-deadline reminder has already been shown.</summary>
+    public DateTime? BeforeDueReminderFor { get; set; }
     public DateTime? SnoozedUntil { get; set; }
 
     [JsonIgnore] public bool IsCompleted => Status == MemoTaskStatus.Completed;
@@ -81,7 +84,7 @@ public sealed class MemoTask
 
 public sealed class AppSettings
 {
-    public TimeSpan WorkStart { get; set; } = new(10, 0, 0);
+    public TimeSpan WorkStart { get; set; } = new(9, 0, 0);
     public TimeSpan WorkEnd { get; set; } = new(18, 0, 0);
     public int ReminderIntervalMinutes { get; set; } = 60;
     public string QuietRanges { get; set; } = "12:00-13:30";
@@ -90,11 +93,14 @@ public sealed class AppSettings
     public DateTime WorkWeekAnchor { get; set; } = DateTime.Today;
     public string ReminderMode { get; set; } = "Icon";
     public bool RemindersEnabled { get; set; } = true;
+    public bool DefaultWorkHoursReminderEnabled { get; set; } = true;
+    public bool DefaultBeforeDueReminderEnabled { get; set; } = true;
+    public int BeforeDueReminderMinutes { get; set; } = 30;
     public bool AutoExportWeekly { get; set; }
     public bool AutoExportMonthly { get; set; }
     public TimeSpan AutoExportTime { get; set; } = new(18, 30, 0);
     public string AutoExportFormat { get; set; } = "Both";
-    public string ExportDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "Exports");
+    public string ExportDirectory { get; set; } = AppStoragePaths.ExportsDirectory;
     public bool ExportOverwrite { get; set; } = true;
     public string LastWeeklyAutoExportKey { get; set; } = "";
     public string LastMonthlyAutoExportKey { get; set; } = "";
