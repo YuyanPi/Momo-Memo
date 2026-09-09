@@ -147,9 +147,20 @@ public partial class MainWindow : Window
     private void ViewsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is not DependencyObject source || ItemsControl.ContainerFromElement(ViewsList, source) is not ListBoxItem item || item.DataContext is not ViewOption view || view.ReminderCount == 0) return;
-        foreach (var task in _data.Tasks.Where(task => _unreadReminderTaskIds.Contains(task.Id) && IsTaskInView(task, view.Id)).ToList())
-            _unreadReminderTaskIds.Remove(task.Id);
+        // A badge means the reminder has not been viewed yet.  Move to the
+        // clicked project before rebuilding the list so the selection remains
+        // on that project after the badge is cleared.
+        _currentView = view.Id;
+        _data.Settings.LastSelectedProjectId = _currentView;
+        MarkRemindersRead(view.Id);
         BuildViews();
+        RefreshTasks();
+    }
+
+    private void MarkRemindersRead(string viewId)
+    {
+        foreach (var task in _data.Tasks.Where(task => _unreadReminderTaskIds.Contains(task.Id) && IsTaskInView(task, viewId)).ToList())
+            _unreadReminderTaskIds.Remove(task.Id);
     }
 
     private bool IsTaskInView(MemoTask task, string viewId) => viewId switch
