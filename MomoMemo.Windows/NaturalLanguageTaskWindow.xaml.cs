@@ -40,7 +40,6 @@ public partial class NaturalLanguageTaskWindow : Window
         DueDatePicker.SelectedDate = result.DueAt?.Date;
         DueHourBox.SelectedItem = (result.DueAt?.Hour ?? 18).ToString("00");
         DueMinuteBox.SelectedItem = (result.DueAt?.Minute ?? 0).ToString("00");
-        DescriptionBox.Text = $"原始记录：{result.OriginalText}";
         WarningText.Text = string.Join("\n", result.Warnings);
         ConfirmButton.IsEnabled = result.Title.Length > 0;
     }
@@ -49,6 +48,12 @@ public partial class NaturalLanguageTaskWindow : Window
     {
         var enabled = NoDueBox.IsChecked != true;
         DueDatePicker.IsEnabled = DueHourBox.IsEnabled = DueMinuteBox.IsEnabled = enabled;
+    }
+
+    private void AddDescription_Changed(object sender, RoutedEventArgs e)
+    {
+        DescriptionBox.IsEnabled = AddDescriptionBox.IsChecked == true;
+        if (!DescriptionBox.IsEnabled) DescriptionBox.Clear();
     }
 
     private void TitleBox_TextChanged(object sender, TextChangedEventArgs e) => ConfirmButton.IsEnabled = TitleBox.Text.Trim().Length > 0;
@@ -74,7 +79,7 @@ public partial class NaturalLanguageTaskWindow : Window
         CreatedTask = new MemoTask
         {
             Title = title,
-            Description = DescriptionBox.Text.Trim(),
+            Description = AddDescriptionBox.IsChecked == true ? DescriptionBox.Text.Trim() : "",
             ProjectId = ProjectBox.SelectedValue?.ToString() ?? "",
             Priority = PriorityBox.SelectedItem?.ToString() ?? "P2",
             DueAt = due,

@@ -23,8 +23,9 @@ public sealed class NaturalLanguageTaskParser
     private static readonly Regex ExplicitDate = new(@"(?<year>20\d{2})[年/-](?<month>\d{1,2})[月/-](?<day>\d{1,2})日?", RegexOptions.Compiled);
     private static readonly Regex MonthDay = new(@"(?<month>\d{1,2})月(?<day>\d{1,2})日?", RegexOptions.Compiled);
     private static readonly Regex Weekday = new(@"(?:下周|下星期)(?<day>[一二三四五六日天])", RegexOptions.Compiled);
-    private static readonly Regex TimeRange = new(@"(?<start>(?:上午|早上|中午|下午|晚上)?\s*\d{1,2}(?::\d{2}|点(?:\d{1,2}分?)?)?)\s*(?:到|至|—|－|-)\s*(?<end>(?:上午|早上|中午|下午|晚上)?\s*\d{1,2}(?::\d{2}|点(?:\d{1,2}分?)?)?)", RegexOptions.Compiled);
-    private static readonly Regex Time = new(@"(?<period>上午|早上|中午|下午|晚上)?\s*(?<hour>\d{1,2})(?::(?<colonMinute>\d{2})|点(?<pointMinute>\d{1,2})?分?)", RegexOptions.Compiled);
+    private const string TimeExpression = @"(?:上午|早上|中午|下午|晚上)?\s*(?:\d{1,2}|[一二三四五六七八九十两]{1,3})(?::\d{2}|点(?:\d{1,2}分?)?)";
+    private static readonly Regex TimeRange = new($@"(?<start>{TimeExpression})\s*(?:到|至|—|－|-)\s*(?<end>{TimeExpression})", RegexOptions.Compiled);
+    private static readonly Regex Time = new(@"(?<period>上午|早上|中午|下午|晚上)?\s*(?<hour>\d{1,2}|[一二三四五六七八九十两]{1,3})(?::(?<colonMinute>\d{2})|点(?<pointMinute>\d{1,2})?分?)", RegexOptions.Compiled);
     private static readonly Regex Code = new(@"^[A-Za-z]+\d+[A-Za-z\d-]*$", RegexOptions.Compiled);
 
     public NaturalLanguageTaskParseResult Parse(string text, IReadOnlyList<ProjectItem> projects, string currentProjectId, DateTime now)
@@ -141,13 +142,32 @@ public sealed class NaturalLanguageTaskParser
     private static TimeSpan ParseTime(string value)
     {
         var match = Time.Match(value);
-        var hour = int.Parse(match.Groups["hour"].Value);
+        var hour = ParseHour(match.Groups["hour"].Value);
         var minuteText = match.Groups["colonMinute"].Success ? match.Groups["colonMinute"].Value : match.Groups["pointMinute"].Value;
         var minute = minuteText.Length == 0 ? 0 : int.Parse(minuteText);
         var period = match.Groups["period"].Value;
         if ((period is "下午" or "晚上") && hour < 12) hour += 12;
         if (period == "中午" && hour < 11) hour += 12;
         return new TimeSpan(Math.Min(hour, 23), Math.Min(minute, 59), 0);
+    }
+
+    private static int ParseHour(string value)
+    {
+        if (int.TryParse(value, out var numericHour)) return numericHour;
+        var digits = new Dictionary<char, int>
+        {
+            ['一'] = 1, ['二'] = 2, ['两'] = 2, ['三'] = 3, ['四'] = 4,
+            ['五'] = 5, ['六'] = 6, ['七'] = 7, ['八'] = 8, ['九'] = 9
+        };
+        if (value == "十") return 10;
+        var tenIndex = value.IndexOf('十');
+        if (tenIndex >= 0)
+        {
+            var tens = tenIndex == 0 ? 1 : digits.GetValueOrDefault(value[0]);
+            var ones = tenIndex == value.Length - 1 ? 0 : digits.GetValueOrDefault(value[^1]);
+            return tens * 10 + ones;
+        }
+        return digits.GetValueOrDefault(value[0]);
     }
 
     private static DateTime WithTime(DateTime date, TimeSpan time) => date.Date.Add(time);
@@ -163,7 +183,7 @@ public sealed class NaturalLanguageTaskParser
         if (project is not null) title = title.Replace(project.Name, "", StringComparison.OrdinalIgnoreCase);
         if (datePattern is not null) title = title.Replace(datePattern, "");
         foreach (var pattern in timePatterns) title = title.Replace(pattern, "");
-        title = Regex.Replace(title, @"(?:今天|明天|后天|下周|下星期)[一二三四五六日天]?|(?:要|需|请)?完成|(?:开始|从)|(?:不要提醒|无需提醒)|\bP[0-3]\b|紧急|重要", "", RegexOptions.IgnoreCase);
+        title = Regex.Replace(title, @"(?:今天|明天|后天|下周|下星期)[一二三四五六日天]?|(?:要|需|请)?完成|(?:开始|从)|(?:不要提醒|无需提醒)|(?:之前|以前|截止前)|\bP[0-3]\b|紧急|重要", "", RegexOptions.IgnoreCase);
         return title.Trim(' ', '，', '。', '：', ':', '的');
     }
 }
