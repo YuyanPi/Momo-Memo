@@ -58,14 +58,14 @@ public static class ExportService
     public static string ExportCsv(IEnumerable<MemoTask> tasks, IReadOnlyList<ProjectItem> projects)
     {
         var names = projects.ToDictionary(x => x.Id, x => x.Name);
-        var output = new StringBuilder("任务 ID,任务名称,描述,项目,状态,优先级,开始时间,截止时间,创建时间,完成时间,修改时间,是否长期任务,是否逾期,是否归档\r\n");
+        var output = new StringBuilder("任务 ID,任务名称,描述,项目,状态,优先级,开始时间,截止时间,创建时间,完成时间,修改时间,是否长期任务,是否逾期\r\n");
         foreach (var task in tasks)
         {
             string[] values =
             [
                 task.Id, task.Title, task.Description, names.GetValueOrDefault(task.ProjectId, "未分类"), task.StatusText,
                 task.Priority, Format(task.StartAt), Format(task.DueAt), Format(task.CreatedAt), Format(task.CompletedAt),
-                Format(task.ModifiedAt), YesNo(task.IsLongTerm), YesNo(task.IsOverdue), YesNo(task.IsArchived)
+                Format(task.ModifiedAt), YesNo(task.IsLongTerm), YesNo(task.IsOverdue)
             ];
             output.AppendLine(string.Join(',', values.Select(Escape)));
         }

@@ -57,8 +57,7 @@ public partial class MainWindow : Window
     {
         var views = new ObservableCollection<ViewOption>
         {
-            new("unclassified", "未分类任务", "#B7A99B", ReminderCountForView("unclassified")),
-            new("archived", $"已归档（{_data.Tasks.Count(x => x.IsArchived)}）", "#82738F", 0)
+            new("unclassified", "未分类任务", "#B7A99B", ReminderCountForView("unclassified"))
         };
         foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
             views.Add(new($"project:{project.Id}", project.Name, project.Color, ReminderCountForView($"project:{project.Id}")));
@@ -94,24 +93,8 @@ public partial class MainWindow : Window
     private void RefreshTasks()
     {
         var today = DateTime.Today;
-        if (_currentView == "archived")
-        {
-            var archived = _data.Tasks.Where(x => x.IsArchived).OrderByDescending(x => x.ArchivedAt ?? x.ModifiedAt).ToList();
-            DecorateTasks(archived);
-            WorkBoard.Visibility = Visibility.Collapsed;
-            ArchivePanel.Visibility = Visibility.Visible;
-            CompletedExpander.Visibility = Visibility.Collapsed;
-            ArchivedTasks.ItemsSource = archived;
-            ArchiveCountText.Text = $"{archived.Count} 项";
-            SummaryText.Text = $"已归档 {archived.Count} 项 · 不参与提醒、逾期和完成统计";
-            return;
-        }
-
-        WorkBoard.Visibility = Visibility.Visible;
-        ArchivePanel.Visibility = Visibility.Collapsed;
-        CompletedExpander.Visibility = Visibility.Visible;
         var tasks = SelectedTasks()
-            .Where(x => !x.IsArchived && !x.IsCompleted)
+            .Where(x => !x.IsCompleted)
             .OrderBy(x => x.IsOverdue ? -1 : x.Priority switch { "P0" => 0, "P1" => 1, "P2" => 2, _ => 3 })
             .ThenBy(x => x.DueAt)
             .ToList();
@@ -122,7 +105,7 @@ public partial class MainWindow : Window
         var weekEnd = weekStart.AddDays(6);
         var weekTasks = tasks.Where(x => x.DueAt is not null && x.DueAt.Value.Date >= weekStart && x.DueAt.Value.Date <= weekEnd).ToList();
         var longTerm = tasks.Where(x => x.DueAt is null || x.DueAt.Value.Date > weekEnd).ToList();
-        var completed = SelectedTasks().Where(x => !x.IsArchived && x.IsCompleted).OrderByDescending(x => x.CompletedAt ?? x.ModifiedAt).ToList();
+        var completed = SelectedTasks().Where(x => x.IsCompleted).OrderByDescending(x => x.CompletedAt ?? x.ModifiedAt).ToList();
         DecorateTasks(completed);
 
         TodayTasks.ItemsSource = todayTasks;
@@ -136,9 +119,8 @@ public partial class MainWindow : Window
         TodayCountText.Text = $"{todayTasks.Count} 项";
         WeekCountText.Text = $"{weekTasks.Count} 项";
         LongTermCountText.Text = $"{longTerm.Count} 项";
-        var visibleTasks = SelectedTasks().Where(x => !x.IsArchived).ToList();
-        var todayCompleted = visibleTasks.Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date == today);
-        var weekCompleted = visibleTasks.Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date >= weekStart && (x.CompletedAt ?? x.ModifiedAt).Date <= weekEnd);
+        var todayCompleted = SelectedTasks().Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date == today);
+        var weekCompleted = SelectedTasks().Count(x => x.IsCompleted && (x.CompletedAt ?? x.ModifiedAt).Date >= weekStart && (x.CompletedAt ?? x.ModifiedAt).Date <= weekEnd);
         SummaryText.Text = $"今天已完成 {todayCompleted} 项 · 本周已完成 {weekCompleted} 项 · 逾期 {tasks.Count(x => x.IsOverdue)} 项";
         ViewToggle_Changed(this, new RoutedEventArgs());
     }
@@ -146,7 +128,6 @@ public partial class MainWindow : Window
     private IEnumerable<MemoTask> SelectedTasks() => _currentView switch
     {
         "none" or "unclassified" => _data.Tasks.Where(x => string.IsNullOrWhiteSpace(x.ProjectId)),
-        "archived" => _data.Tasks.Where(x => x.IsArchived),
         _ when _currentView.StartsWith("project:") => _data.Tasks.Where(x => x.ProjectId == _currentView[8..]),
         "hidden" => Enumerable.Empty<MemoTask>(),
         _ => _data.Tasks
@@ -154,7 +135,7 @@ public partial class MainWindow : Window
 
     private int ReminderCountForView(string viewId)
     {
-        return _data.Tasks.Count(task => _unreadReminderTaskIds.Contains(task.Id) && !task.IsCompleted && !task.IsArchived && viewId switch
+        return _data.Tasks.Count(task => _unreadReminderTaskIds.Contains(task.Id) && !task.IsCompleted && viewId switch
         {
             "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
             "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
@@ -174,7 +155,6 @@ public partial class MainWindow : Window
     private bool IsTaskInView(MemoTask task, string viewId) => viewId switch
     {
         "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
-        "archived" => task.IsArchived,
         "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
         _ when viewId.StartsWith("project:") => task.ProjectId == viewId[8..],
         _ => false
@@ -372,8 +352,8 @@ public partial class MainWindow : Window
         if (task.IsCompleted)
         {
             task.CompletedAt ??= DateTime.Now;
-            task.EverCompleted = true;
         }
+        else task.CompletedAt = null;
         task.ModifiedAt = DateTime.Now;
         SaveAndRefresh();
     }
@@ -417,27 +397,6 @@ public partial class MainWindow : Window
         if (FindTask((sender as FrameworkElement)?.Tag) is { } task) UpdateTaskStatus(task, MemoTaskStatus.InProgress);
     }
 
-    private void RestoreArchived_Click(object sender, RoutedEventArgs e)
-    {
-        if (FindTask((sender as FrameworkElement)?.Tag) is not { } task || !task.IsArchived) return;
-        if (task.DueAt is not null && task.DueAt < DateTime.Now)
-        {
-            var result = WpfMessageBox.Show(
-                "该任务的截止时间已过。选择“是”可恢复为进行中并将截止时间顺延 24 小时；选择“否”仅恢复；取消则不修改。",
-                "恢复归档任务", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if (result == MessageBoxResult.Cancel) return;
-            if (result == MessageBoxResult.Yes)
-            {
-                task.DueAt = task.DueAt.Value.AddDays(1);
-                task.BeforeDueReminderFor = null;
-            }
-        }
-        task.IsArchived = false;
-        task.Status = MemoTaskStatus.InProgress;
-        task.ModifiedAt = DateTime.Now;
-        SaveAndRefresh(true);
-    }
-
     private void UpdateTaskStatus(MemoTask task, MemoTaskStatus status)
     {
         // "已逾期" is a calculated display state.  The underlying task is often
@@ -458,8 +417,8 @@ public partial class MainWindow : Window
         if (status == MemoTaskStatus.Completed)
         {
             task.CompletedAt = DateTime.Now;
-            task.EverCompleted = true;
         }
+        else task.CompletedAt = null;
         task.ModifiedAt = DateTime.Now;
         SaveAndRefresh();
     }
@@ -475,31 +434,13 @@ public partial class MainWindow : Window
     {
         var task = FindTask(id);
         if (task is null) return;
-        if (task.IsCompleted || task.IsArchived)
+        if (task.IsCompleted)
         {
-            WpfMessageBox.Show("请先恢复已完成或已归档的任务，再执行删除。", "不能删除", MessageBoxButton.OK, MessageBoxImage.Information);
+            WpfMessageBox.Show("请先恢复已完成的任务，再执行删除。", "不能删除", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (WpfMessageBox.Show($"确定真正删除“{task.Title}”吗？", "删除错误任务", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _data.Tasks.Remove(task);
-        SaveAndRefresh(true);
-    }
-
-    private void Archive_Click(object sender, RoutedEventArgs e)
-    {
-        var task = FindTask((sender as FrameworkElement)?.Tag ?? (sender as MenuItem)?.CommandParameter);
-        if (task is null) return;
-        if (task.IsArchived) return;
-        if (task.IsCompleted)
-        {
-            WpfMessageBox.Show("已完成任务会保留在完成记录中，无需归档。", "无需归档", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        if (WpfMessageBox.Show($"归档“{task.Title}”吗？归档后任务不会参与提醒、逾期和完成统计。", "归档任务", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        task.IsArchived = true;
-        task.EverArchived = true;
-        task.ArchivedAt = DateTime.Now;
-        task.ModifiedAt = DateTime.Now;
         SaveAndRefresh(true);
     }
 
@@ -530,7 +471,7 @@ public partial class MainWindow : Window
     {
         var start = StartOfWeek(DateTime.Today);
         var hiddenProjectIds = _data.Projects.Where(p => p.IsHidden).Select(p => p.Id).ToHashSet();
-        var tasks = _data.Tasks.Where(x => !x.IsArchived && !hiddenProjectIds.Contains(x.ProjectId) && ((x.StartAt ?? x.CreatedAt) >= start && (x.StartAt ?? x.CreatedAt) < start.AddDays(7))).ToList();
+        var tasks = _data.Tasks.Where(x => !hiddenProjectIds.Contains(x.ProjectId) && ((x.StartAt ?? x.CreatedAt) >= start && (x.StartAt ?? x.CreatedAt) < start.AddDays(7))).ToList();
         var done = tasks.Count(x => x.IsCompleted);
         var projects = _data.Projects.Where(p => !p.IsHidden).Select(p => $"{p.Name}：{tasks.Count(x => x.ProjectId == p.Id && x.IsCompleted)}/{tasks.Count(x => x.ProjectId == p.Id)}");
         var priorities = new[] { "P0", "P1", "P2", "P3" }.Select(p => $"{p}：{tasks.Count(x => x.Priority == p && x.IsCompleted)}/{tasks.Count(x => x.Priority == p)}");
@@ -571,7 +512,7 @@ public partial class MainWindow : Window
         if (_lastReminderKey == key) return;
         _lastReminderKey = key;
         var elapsed = (int)(now.TimeOfDay - settings.WorkStart).TotalMinutes;
-        var candidates = _data.Tasks.Where(x => !x.IsCompleted && x.Status != MemoTaskStatus.Paused && !x.IsArchived && x.ReminderEnabled && (x.ReminderRule != "None" || x.BeforeDueReminderEnabled) && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
+        var candidates = _data.Tasks.Where(x => !x.IsCompleted && x.Status != MemoTaskStatus.Paused && x.ReminderEnabled && (x.ReminderRule != "None" || x.BeforeDueReminderEnabled) && (x.IsOverdue || x.MustToday || x.StartAt?.Date == now.Date || x.DueAt?.Date == now.Date) && !(x.SnoozedUntil > now)).ToList();
         var triggered = candidates.Where(x => IsWorkHoursReminderDue(x, elapsed, settings) || IsBeforeDueReminderDue(x, now, settings)).ToList();
         if (candidates.Count == 0) { ClearReminderState(); return; }
         if (triggered.Count == 0) return;

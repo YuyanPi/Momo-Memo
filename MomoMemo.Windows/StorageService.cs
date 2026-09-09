@@ -88,8 +88,6 @@ public sealed class StorageService
             task.MustToday = false;
             task.IsLongTerm = false;
             if (task.Status == MemoTaskStatus.Completed && task.CompletedAt is null) task.CompletedAt = task.ModifiedAt;
-            if (task.Status == MemoTaskStatus.Completed) task.EverCompleted = true;
-            if (task.IsArchived) task.EverArchived = true;
         }
     }
 

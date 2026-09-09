@@ -45,12 +45,8 @@ public sealed class MemoTask
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime ModifiedAt { get; set; } = DateTime.Now;
     public DateTime? CompletedAt { get; set; }
-    public bool EverCompleted { get; set; }
     public bool MustToday { get; set; }
     public bool IsLongTerm { get; set; }
-    public bool IsArchived { get; set; }
-    public bool EverArchived { get; set; }
-    public DateTime? ArchivedAt { get; set; }
     public bool ReminderEnabled { get; set; } = true;
     public string ReminderRule { get; set; } = "WorkHours";
     public bool BeforeDueReminderEnabled { get; set; }
@@ -59,12 +55,12 @@ public sealed class MemoTask
     public DateTime? SnoozedUntil { get; set; }
 
     [JsonIgnore] public bool IsCompleted => Status == MemoTaskStatus.Completed;
-    [JsonIgnore] public bool CanDelete => !IsCompleted && !IsArchived;
-    [JsonIgnore] public bool CanSnooze => !IsCompleted && !IsArchived;
+    [JsonIgnore] public bool CanDelete => !IsCompleted;
+    [JsonIgnore] public bool CanSnooze => !IsCompleted;
     [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     [JsonIgnore] public string ProjectName { get; set; } = "未分类";
     [JsonIgnore] public string ProjectColor { get; set; } = "#B7A99B";
-    [JsonIgnore] public bool IsOverdue => !IsCompleted && Status != MemoTaskStatus.Paused && !IsArchived && DueAt is not null && DueAt < DateTime.Now;
+    [JsonIgnore] public bool IsOverdue => !IsCompleted && Status != MemoTaskStatus.Paused && DueAt is not null && DueAt < DateTime.Now;
     [JsonIgnore] public string StatusText => IsOverdue ? "已逾期" : Status switch
     {
         MemoTaskStatus.NotStarted => "未开始",

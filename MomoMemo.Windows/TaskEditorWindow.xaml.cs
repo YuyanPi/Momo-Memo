@@ -77,8 +77,8 @@ public partial class TaskEditorWindow : Window
         if (_task.IsCompleted)
         {
             if (!wasCompleted) _task.CompletedAt ??= DateTime.Now;
-            _task.EverCompleted = true;
         }
+        else _task.CompletedAt = null;
         DialogResult = true;
     }
 
