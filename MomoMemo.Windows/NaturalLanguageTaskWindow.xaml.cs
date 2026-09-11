@@ -83,6 +83,7 @@ public partial class NaturalLanguageTaskWindow : Window
             ProjectId = ProjectBox.SelectedValue?.ToString() ?? "",
             Priority = PriorityBox.SelectedItem?.ToString() ?? "P2",
             DueAt = due,
+            IsLongTerm = LongTermBox.IsChecked == true,
             ReminderEnabled = ReminderBox.IsChecked == true,
             ReminderRule = WorkHoursReminderBox.IsChecked == true ? "WorkHours" : "None",
             BeforeDueReminderEnabled = BeforeDueReminderBox.IsChecked == true,
@@ -90,5 +91,14 @@ public partial class NaturalLanguageTaskWindow : Window
             ModifiedAt = DateTime.Now
         };
         DialogResult = true;
+    }
+
+    private void LongTerm_Changed(object sender, RoutedEventArgs e)
+    {
+        if (LongTermBox.IsChecked != true) return;
+        NoDueBox.IsChecked = true;
+        ReminderBox.IsChecked = false;
+        WorkHoursReminderBox.IsChecked = false;
+        BeforeDueReminderBox.IsChecked = false;
     }
 }

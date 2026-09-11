@@ -86,7 +86,6 @@ public sealed class StorageService
                 task.BeforeDueReminderEnabled = true;
             }
             task.MustToday = false;
-            task.IsLongTerm = false;
             if (task.Status == MemoTaskStatus.Completed && task.CompletedAt is null) task.CompletedAt = task.ModifiedAt;
         }
     }

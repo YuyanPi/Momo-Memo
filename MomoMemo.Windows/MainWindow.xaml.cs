@@ -100,11 +100,13 @@ public partial class MainWindow : Window
             .ToList();
         DecorateTasks(tasks);
 
-        var todayTasks = tasks.Where(x => x.DueAt is not null && x.DueAt.Value.Date <= today).ToList();
+        // The three unfinished buckets are intentionally mutually exclusive.  A task marked
+        // long-term stays in the long-term bucket even when it has a date.
+        var todayTasks = tasks.Where(x => !x.IsLongTerm && x.DueAt is not null && x.DueAt.Value.Date <= today).ToList();
         var weekStart = StartOfWeek(today);
         var weekEnd = weekStart.AddDays(6);
-        var weekTasks = tasks.Where(x => x.DueAt is not null && x.DueAt.Value.Date >= weekStart && x.DueAt.Value.Date <= weekEnd).ToList();
-        var longTerm = tasks.Where(x => x.DueAt is null || x.DueAt.Value.Date > weekEnd).ToList();
+        var weekTasks = tasks.Where(x => !x.IsLongTerm && x.DueAt is not null && x.DueAt.Value.Date > today && x.DueAt.Value.Date <= weekEnd).ToList();
+        var longTerm = tasks.Where(x => x.IsLongTerm || x.DueAt is null || x.DueAt.Value.Date > weekEnd).ToList();
         var completed = SelectedTasks().Where(x => x.IsCompleted).OrderByDescending(x => x.CompletedAt ?? x.ModifiedAt).ToList();
         DecorateTasks(completed);
 
@@ -380,25 +382,34 @@ public partial class MainWindow : Window
             BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 215, 204)),
             Padding = new Thickness(4)
         };
-        foreach (var (status, title, marker) in new[]
+        void AddItem(string title, Action action)
         {
-            (MemoTaskStatus.InProgress, "进行中", "●"),
-            (MemoTaskStatus.Paused, "暂停", "Ⅱ"),
-            (MemoTaskStatus.Completed, "已完成", "✓")
-        })
-        {
-            var item = new MenuItem
-            {
-                Header = status == MemoTaskStatus.InProgress && task.IsOverdue
-                    ? $"{marker}  {title}（截止顺延一天）"
-                    : $"{marker}  {title}",
-                IsCheckable = true,
-                IsChecked = task.Status == status,
-                Padding = new Thickness(12, 6, 18, 6),
-                FontSize = 12
-            };
-            item.Click += (_, _) => UpdateTaskStatus(task, status);
+            var item = new MenuItem { Header = title, Padding = new Thickness(12, 6, 18, 6), FontSize = 12 };
+            item.Click += (_, _) => action();
             menu.Items.Add(item);
+        }
+
+        if (task.IsCompleted)
+        {
+            AddItem("↩  恢复任务", () => UpdateTaskStatus(task, MemoTaskStatus.InProgress));
+        }
+        else if (task.IsOverdue)
+        {
+            AddItem("✓  标记为已完成", () => UpdateTaskStatus(task, MemoTaskStatus.Completed));
+            menu.Items.Add(new Separator());
+            AddItem("↪  顺延一天", () => PostponeOneDay(task));
+            AddItem("📅  选择新的截止时间", () => ChooseNewDeadline(task));
+            AddItem("Ⅱ  暂停", () => UpdateTaskStatus(task, MemoTaskStatus.Paused));
+        }
+        else if (task.Status == MemoTaskStatus.Paused)
+        {
+            AddItem("▶  继续任务", () => UpdateTaskStatus(task, MemoTaskStatus.InProgress));
+            AddItem("✓  标记为已完成", () => UpdateTaskStatus(task, MemoTaskStatus.Completed));
+        }
+        else
+        {
+            AddItem("✓  标记为已完成", () => UpdateTaskStatus(task, MemoTaskStatus.Completed));
+            AddItem("Ⅱ  暂停", () => UpdateTaskStatus(task, MemoTaskStatus.Paused));
         }
         menu.IsOpen = true;
     }
@@ -410,19 +421,6 @@ public partial class MainWindow : Window
 
     private void UpdateTaskStatus(MemoTask task, MemoTaskStatus status)
     {
-        // "已逾期" is a calculated display state.  The underlying task is often
-        // already InProgress, so selecting InProgress must still restore it by
-        // moving its deadline forward.
-        if (status == MemoTaskStatus.InProgress && task.IsOverdue)
-        {
-            task.Status = MemoTaskStatus.InProgress;
-            task.DueAt = task.DueAt!.Value.AddDays(1);
-            task.BeforeDueReminderFor = null;
-            task.ModifiedAt = DateTime.Now;
-            SaveAndRefresh();
-            return;
-        }
-
         if (task.Status == status) return;
         task.Status = status;
         if (status == MemoTaskStatus.Completed)
@@ -430,6 +428,25 @@ public partial class MainWindow : Window
             task.CompletedAt = DateTime.Now;
         }
         else task.CompletedAt = null;
+        task.ModifiedAt = DateTime.Now;
+        SaveAndRefresh();
+    }
+
+    private void PostponeOneDay(MemoTask task)
+    {
+        if (task.DueAt is null) return;
+        task.DueAt = DateTime.Today.AddDays(1).Add(task.DueAt.Value.TimeOfDay);
+        task.BeforeDueReminderFor = null;
+        task.ModifiedAt = DateTime.Now;
+        SaveAndRefresh();
+    }
+
+    private void ChooseNewDeadline(MemoTask task)
+    {
+        var dialog = new PostponeTaskWindow(task.DueAt) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.DueAt is null) return;
+        task.DueAt = dialog.DueAt;
+        task.BeforeDueReminderFor = null;
         task.ModifiedAt = DateTime.Now;
         SaveAndRefresh();
     }

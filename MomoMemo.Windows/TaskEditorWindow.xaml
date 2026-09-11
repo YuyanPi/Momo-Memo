@@ -16,9 +16,11 @@
                 <TextBlock Text="所属项目" FontWeight="SemiBold" Margin="0,8,0,0"/>
                 <ComboBox x:Name="ProjectBox" DisplayMemberPath="Name" SelectedValuePath="Id"/>
                 <TextBlock Text="状态" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                <ComboBox x:Name="StatusBox"/>
+                <ComboBox x:Name="StatusBox" DisplayMemberPath="Title" SelectedValuePath="Id"/>
                 <TextBlock Text="优先级" FontWeight="SemiBold" Margin="0,8,0,0"/>
                 <ComboBox x:Name="PriorityBox"/>
+                <CheckBox x:Name="LongTermBox" Content="长期任务" Margin="0,8,0,0" Checked="LongTerm_Changed" Unchecked="LongTerm_Changed"/>
+                <TextBlock Text="长期任务默认不提醒，也只显示在“长期”列表；开始和截止时间可不填。" Foreground="#786E67" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
 
                 <TextBlock Text="开始时间" FontWeight="SemiBold" Margin="0,10,0,0"/>
                 <Grid>
@@ -26,15 +28,16 @@
                     <DatePicker x:Name="StartDatePicker"/>
                     <ComboBox x:Name="StartHourBox" Grid.Column="1" Margin="5,3"/>
                     <ComboBox x:Name="StartMinuteBox" Grid.Column="2" Margin="0,3,5,3"/>
-                    <Button Grid.Column="3" Content="清除" Click="ClearStart_Click"/>
+                    <Button x:Name="ClearStartButton" Grid.Column="3" Content="清除" Click="ClearStart_Click"/>
                 </Grid>
 
                 <TextBlock Text="截止时间" FontWeight="SemiBold" Margin="0,8,0,0"/>
                 <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="70"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="70"/><ColumnDefinition Width="70"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <DatePicker x:Name="DueDatePicker"/>
                     <ComboBox x:Name="DueHourBox" Grid.Column="1" Margin="5,3"/>
                     <ComboBox x:Name="DueMinuteBox" Grid.Column="2" Margin="0,3,5,3"/>
+                    <Button x:Name="ClearDueButton" Grid.Column="3" Content="清除" Click="ClearDue_Click"/>
                 </Grid>
                 <CheckBox x:Name="ReminderEnabledBox" Content="参与提醒" Margin="0,6,0,0"/>
                 <TextBlock Text="工作时间提醒规则" FontWeight="SemiBold" Margin="0,8,0,0"/>
