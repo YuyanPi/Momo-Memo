@@ -47,34 +47,9 @@ static NSString *MMDefaultExportDirectory(void) {
     return [(documents ?: NSHomeDirectory()) stringByAppendingPathComponent:@"Momo Memo"];
 }
 
-static NSString *MMPriorityCode(NSString *priority) {
-    if ([priority isEqualToString:@"p0"] || [priority isEqualToString:@"P0"] || [priority isEqualToString:@"高"]) return @"p0";
-    if ([priority isEqualToString:@"p1"] || [priority isEqualToString:@"P1"] || [priority isEqualToString:@"中"]) return @"p1";
-    if ([priority isEqualToString:@"p2"] || [priority isEqualToString:@"P2"]) return @"p2";
-    if ([priority isEqualToString:@"p3"] || [priority isEqualToString:@"P3"] || [priority isEqualToString:@"低"]) return @"p3";
-    return @"p1";
-}
-
-static NSString *MMPriorityQuadrantTitle(NSString *priority) {
-    NSString *code = MMPriorityCode(priority);
-    if ([code isEqualToString:@"p0"]) return @"重要且紧急";
-    if ([code isEqualToString:@"p1"]) return @"重要不紧急";
-    if ([code isEqualToString:@"p2"]) return @"紧急不重要";
-    return @"不重要不紧急";
-}
-
-static NSString *MMPriorityHint(NSString *priority) {
-    NSString *code = MMPriorityCode(priority);
-    if ([code isEqualToString:@"p0"]) return @"马上处理";
-    if ([code isEqualToString:@"p1"]) return @"计划推进";
-    if ([code isEqualToString:@"p2"]) return @"快速处理";
-    return @"稍后整理";
-}
-
 @interface MMAppDelegate : NSObject <NSApplicationDelegate>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) NSPopUpButton *projectPopup;
-@property(nonatomic, strong) NSSegmentedControl *viewModeControl;
 @property(nonatomic, strong) NSScrollView *scrollView;
 @property(nonatomic, strong) NSStackView *taskStack;
 @property(nonatomic, strong) NSTextField *summaryLabel;
@@ -197,7 +172,7 @@ static NSString *MMPriorityHint(NSString *priority) {
 }
 
 - (void)buildWindow {
-    NSSize size = NSMakeSize(760, 680);
+    NSSize size = NSMakeSize(430, 620);
     self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, size.width, size.height)
         styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     self.window.title = @"Momo Memo";
@@ -222,10 +197,6 @@ static NSString *MMPriorityHint(NSString *priority) {
     self.projectPopup.action = @selector(projectChanged:);
     self.projectPopup.translatesAutoresizingMaskIntoConstraints = NO;
     [self reloadProjectPopup];
-
-    self.viewModeControl = [NSSegmentedControl segmentedControlWithLabels:@[@"列表", @"四象限"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(viewModeChanged:)];
-    self.viewModeControl.selectedSegment = 0;
-    self.viewModeControl.translatesAutoresizingMaskIntoConstraints = NO;
 
     NSButton *pin = MMButton(@"置顶", self, @selector(togglePin:));
     NSButton *hide = MMButton(@"隐藏", self, @selector(hideWindow));
@@ -265,7 +236,7 @@ static NSString *MMPriorityHint(NSString *priority) {
 
     NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, size.width, size.height)];
     [content addSubview:panel];
-    for (NSView *view in @[title, self.projectPopup, self.viewModeControl, topButtons, self.summaryLabel, self.hideDoneButton, self.scrollView, bottom]) {
+    for (NSView *view in @[title, self.projectPopup, topButtons, self.summaryLabel, self.hideDoneButton, self.scrollView, bottom]) {
         [panel addSubview:view];
     }
     self.window.contentView = content;
@@ -281,11 +252,8 @@ static NSString *MMPriorityHint(NSString *priority) {
         [self.projectPopup.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
         [self.projectPopup.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-16],
         [self.projectPopup.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:12],
-        [self.viewModeControl.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
-        [self.viewModeControl.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-16],
-        [self.viewModeControl.topAnchor constraintEqualToAnchor:self.projectPopup.bottomAnchor constant:10],
         [self.summaryLabel.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:18],
-        [self.summaryLabel.topAnchor constraintEqualToAnchor:self.viewModeControl.bottomAnchor constant:12],
+        [self.summaryLabel.topAnchor constraintEqualToAnchor:self.projectPopup.bottomAnchor constant:12],
         [self.hideDoneButton.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-18],
         [self.hideDoneButton.centerYAnchor constraintEqualToAnchor:self.summaryLabel.centerYAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:14],
@@ -345,27 +313,11 @@ static NSString *MMPriorityHint(NSString *priority) {
     }];
 }
 
-- (NSArray *)todayVisibleTasks {
-    NSString *today = MMDateString(NSDate.date);
-    NSArray *tasks = [[self sortedTasks] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSDictionary *task, NSDictionary *bindings) {
-        return [(task[@"taskDate"] ?: @"") isEqualToString:today];
-    }]];
-    return tasks;
-}
-
 - (void)render {
     for (NSView *view in self.taskStack.arrangedSubviews.copy) {
         [self.taskStack removeArrangedSubview:view];
         [view removeFromSuperview];
     }
-    if (self.viewModeControl.selectedSegment == 1) {
-        [self renderQuadrants];
-    } else {
-        [self renderList];
-    }
-}
-
-- (void)renderList {
     NSArray *tasks = [self sortedTasks];
     NSInteger done = 0;
     for (NSDictionary *task in tasks) if ([task[@"completed"] boolValue]) done++;
@@ -390,114 +342,6 @@ static NSString *MMPriorityHint(NSString *priority) {
     }
 }
 
-- (void)renderQuadrants {
-    NSArray *tasks = [self todayVisibleTasks];
-    NSInteger done = 0;
-    for (NSDictionary *task in tasks) if ([task[@"completed"] boolValue]) done++;
-    self.summaryLabel.stringValue = [NSString stringWithFormat:@"今日四象限 %ld 项，已完成 %ld 项", (long)tasks.count, (long)done];
-
-    NSView *p0 = [self quadrantViewForPriority:@"p0" tasks:tasks];
-    NSView *p1 = [self quadrantViewForPriority:@"p1" tasks:tasks];
-    NSView *p2 = [self quadrantViewForPriority:@"p2" tasks:tasks];
-    NSView *p3 = [self quadrantViewForPriority:@"p3" tasks:tasks];
-    NSGridView *grid = [NSGridView gridViewWithViews:@[@[p0, p1], @[p2, p3]]];
-    grid.rowSpacing = 12;
-    grid.columnSpacing = 12;
-    grid.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.taskStack addArrangedSubview:grid];
-    [NSLayoutConstraint activateConstraints:@[
-        [grid.widthAnchor constraintEqualToAnchor:self.taskStack.widthAnchor],
-        [p0.widthAnchor constraintEqualToAnchor:p1.widthAnchor],
-        [p2.widthAnchor constraintEqualToAnchor:p3.widthAnchor],
-        [p0.widthAnchor constraintEqualToAnchor:p2.widthAnchor],
-        [p0.heightAnchor constraintEqualToAnchor:p1.heightAnchor],
-        [p2.heightAnchor constraintEqualToAnchor:p3.heightAnchor],
-        [p0.heightAnchor constraintEqualToAnchor:p2.heightAnchor]
-    ]];
-}
-
-- (NSView *)quadrantViewForPriority:(NSString *)priority tasks:(NSArray *)tasks {
-    NSMutableArray *quadrantTasks = [NSMutableArray array];
-    for (NSDictionary *task in tasks) {
-        if ([MMPriorityCode(task[@"priority"]) isEqualToString:priority]) [quadrantTasks addObject:task];
-    }
-    [quadrantTasks sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        NSDictionary *projectA = [self projectById:a[@"projectId"]];
-        NSDictionary *projectB = [self projectById:b[@"projectId"]];
-        NSInteger orderA = [projectA[@"order"] integerValue];
-        NSInteger orderB = [projectB[@"order"] integerValue];
-        if (orderA != orderB) return orderA < orderB ? NSOrderedAscending : NSOrderedDescending;
-        NSComparisonResult projectName = [projectA[@"name"] compare:projectB[@"name"]];
-        if (projectName != NSOrderedSame) return projectName;
-        BOOL pinnedA = [a[@"pinned"] boolValue], pinnedB = [b[@"pinned"] boolValue];
-        if (pinnedA != pinnedB) return pinnedA ? NSOrderedAscending : NSOrderedDescending;
-        return [a[@"title"] compare:b[@"title"]];
-    }];
-
-    NSBox *box = [NSBox new];
-    box.boxType = NSBoxCustom;
-    box.cornerRadius = 10;
-    box.borderWidth = 1;
-    box.borderColor = [NSColor colorWithWhite:.74 alpha:.55];
-    box.fillColor = [NSColor colorWithWhite:1 alpha:.42];
-    box.translatesAutoresizingMaskIntoConstraints = NO;
-
-    NSTextField *code = MMLabel([NSString stringWithFormat:@"%@ · %@", priority, MMPriorityHint(priority)], 11, NSFontWeightSemibold);
-    code.textColor = [NSColor secondaryLabelColor];
-    NSTextField *title = MMLabel(MMPriorityQuadrantTitle(priority), 16, NSFontWeightSemibold);
-    NSTextField *count = MMLabel([NSString stringWithFormat:@"%ld 项", (long)quadrantTasks.count], 12, NSFontWeightSemibold);
-    count.alignment = NSTextAlignmentRight;
-    count.textColor = [NSColor secondaryLabelColor];
-
-    NSStackView *headingTexts = [NSStackView stackViewWithViews:@[code, title]];
-    headingTexts.orientation = NSUserInterfaceLayoutOrientationVertical;
-    headingTexts.spacing = 2;
-    headingTexts.translatesAutoresizingMaskIntoConstraints = NO;
-
-    NSStackView *heading = [NSStackView stackViewWithViews:@[headingTexts, count]];
-    heading.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-    heading.alignment = NSLayoutAttributeTop;
-    heading.distribution = NSStackViewDistributionFill;
-    heading.spacing = 8;
-    heading.translatesAutoresizingMaskIntoConstraints = NO;
-
-    NSStackView *content = [NSStackView stackViewWithViews:@[heading]];
-    content.orientation = NSUserInterfaceLayoutOrientationVertical;
-    content.alignment = NSLayoutAttributeWidth;
-    content.spacing = 10;
-    content.edgeInsets = NSEdgeInsetsMake(12, 12, 12, 12);
-    content.translatesAutoresizingMaskIntoConstraints = NO;
-
-    if (!quadrantTasks.count) {
-        NSTextField *empty = MMLabel(@"暂无今日任务", 13, NSFontWeightRegular);
-        empty.alignment = NSTextAlignmentCenter;
-        empty.textColor = [NSColor secondaryLabelColor];
-        [content addArrangedSubview:empty];
-    } else {
-        NSString *lastProjectId = nil;
-        for (NSDictionary *task in quadrantTasks) {
-            if (![lastProjectId isEqualToString:task[@"projectId"]]) {
-                NSDictionary *project = [self projectById:task[@"projectId"]];
-                NSTextField *header = MMLabel(project[@"name"] ?: @"未分组", 12, NSFontWeightSemibold);
-                header.textColor = MMColor(project[@"color"]);
-                [content addArrangedSubview:header];
-                lastProjectId = task[@"projectId"];
-            }
-            [content addArrangedSubview:[self taskCard:task]];
-        }
-    }
-
-    [box addSubview:content];
-    [NSLayoutConstraint activateConstraints:@[
-        [content.leadingAnchor constraintEqualToAnchor:box.leadingAnchor],
-        [content.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
-        [content.topAnchor constraintEqualToAnchor:box.topAnchor],
-        [content.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
-        [box.heightAnchor constraintGreaterThanOrEqualToConstant:260]
-    ]];
-    return box;
-}
-
 - (NSView *)taskCard:(NSDictionary *)task {
     NSBox *box = [NSBox new];
     box.boxType = NSBoxCustom;
@@ -509,8 +353,7 @@ static NSString *MMPriorityHint(NSString *priority) {
     NSDictionary *project = [self projectById:task[@"projectId"]];
     NSView *bar = [NSView new];
     bar.wantsLayer = YES;
-    NSString *barColor = [task[@"color"] length] ? task[@"color"] : project[@"color"];
-    bar.layer.backgroundColor = MMColor(barColor).CGColor;
+    bar.layer.backgroundColor = MMColor(task[@"color"] ?: project[@"color"]).CGColor;
     bar.translatesAutoresizingMaskIntoConstraints = NO;
 
     NSButton *check = [NSButton checkboxWithTitle:@"" target:self action:@selector(toggleTaskDone:)];
@@ -523,16 +366,11 @@ static NSString *MMPriorityHint(NSString *priority) {
     NSString *date = task[@"startDate"] ?: task[@"taskDate"] ?: MMDateString(NSDate.date);
     NSString *end = task[@"finishDate"];
     NSString *dateText = end.length && ![end isEqualToString:date] ? [NSString stringWithFormat:@"%@ 至 %@", date, end] : date;
-    NSString *statusText = [task[@"completed"] boolValue] ? @"已完成" : @"未完成";
-    NSMutableArray *meta = [NSMutableArray arrayWithObjects:dateText, statusText, MMPriorityCode(task[@"priority"]), nil];
+    NSMutableArray *meta = [NSMutableArray arrayWithObjects:dateText, task[@"priority"] ?: @"中", nil];
     if ([task[@"dueDate"] length]) [meta addObject:[NSString stringWithFormat:@"截止 %@", task[@"dueDate"]]];
     if ([task[@"repeat"] length] && ![task[@"repeat"] isEqualToString:@"无"]) [meta addObject:[NSString stringWithFormat:@"重复 %@", task[@"repeat"]]];
     NSTextField *detail = MMLabel([meta componentsJoinedByString:@"  ·  "], 11, NSFontWeightRegular);
     detail.textColor = [NSColor secondaryLabelColor];
-
-    NSTextField *desc = MMLabel(task[@"desc"] ?: @"", 12, NSFontWeightRegular);
-    desc.textColor = [NSColor secondaryLabelColor];
-    desc.hidden = ![task[@"desc"] length];
 
     NSString *tagsText = [task[@"tags"] count] ? [NSString stringWithFormat:@"#%@", [task[@"tags"] componentsJoinedByString:@"  #"]] : @"";
     NSTextField *tags = MMLabel(tagsText, 11, NSFontWeightRegular);
@@ -557,7 +395,7 @@ static NSString *MMPriorityHint(NSString *priority) {
     actions.spacing = 6;
     actions.translatesAutoresizingMaskIntoConstraints = NO;
 
-    NSStackView *texts = [NSStackView stackViewWithViews:@[title, desc, detail, tags, subs, actions]];
+    NSStackView *texts = [NSStackView stackViewWithViews:@[title, detail, tags, subs, actions]];
     texts.orientation = NSUserInterfaceLayoutOrientationVertical;
     texts.alignment = NSLayoutAttributeLeading;
     texts.spacing = 5;
@@ -628,7 +466,7 @@ static NSString *MMPriorityHint(NSString *priority) {
         @"finishDate": @"",
         @"dueDate": @"",
         @"taskDate": MMDateString(NSDate.date),
-        @"priority": @"p1",
+        @"priority": @"中",
         @"completed": @NO,
         @"pinned": @NO,
         @"repeat": @"无"
@@ -656,7 +494,7 @@ static NSString *MMPriorityHint(NSString *priority) {
         @"finishDate": @"",
         @"dueDate": @"",
         @"taskDate": MMDateString(NSDate.date),
-        @"priority": @"p1",
+        @"priority": @"中",
         @"completed": @NO,
         @"pinned": @NO,
         @"repeat": @"无",
@@ -682,8 +520,8 @@ static NSString *MMPriorityHint(NSString *priority) {
         if ([p[@"id"] isEqualToString:draft[@"projectId"]]) [project selectItem:project.lastItem];
     }
     NSPopUpButton *priority = [NSPopUpButton new];
-    [priority addItemsWithTitles:@[@"p0", @"p1", @"p2", @"p3"]];
-    [priority selectItemWithTitle:MMPriorityCode(draft[@"priority"])];
+    [priority addItemsWithTitles:@[@"高", @"中", @"低"]];
+    [priority selectItemWithTitle:draft[@"priority"] ?: @"中"];
     NSPopUpButton *repeat = [NSPopUpButton new];
     [repeat addItemsWithTitles:@[@"无", @"每日", @"每周", @"每月", @"自定义"]];
     [repeat selectItemWithTitle:draft[@"repeat"] ?: @"无"];
@@ -728,7 +566,7 @@ static NSString *MMPriorityHint(NSString *priority) {
     draft[@"finishDate"] = finish.stringValue ?: @"";
     draft[@"dueDate"] = due.stringValue ?: @"";
     draft[@"taskDate"] = taskDate.stringValue.length ? taskDate.stringValue : MMDateString(NSDate.date);
-    draft[@"priority"] = MMPriorityCode(priority.titleOfSelectedItem);
+    draft[@"priority"] = priority.titleOfSelectedItem ?: @"中";
     draft[@"tags"] = tagList;
     draft[@"subtasks"] = subList;
     draft[@"repeat"] = repeatValue ?: @"无";
@@ -773,10 +611,6 @@ static NSString *MMPriorityHint(NSString *priority) {
 
 - (void)projectChanged:(NSPopUpButton *)sender {
     self.currentProjectId = sender.selectedItem.representedObject ?: @"all";
-    [self render];
-}
-
-- (void)viewModeChanged:(NSSegmentedControl *)sender {
     [self render];
 }
 
