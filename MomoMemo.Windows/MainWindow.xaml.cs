@@ -18,6 +18,14 @@ public partial class MainWindow : Window
         public bool HasReminder => ReminderCount > 0;
     }
 
+    private sealed class ProjectTaskGroup
+    {
+        public string ProjectName { get; init; } = "";
+        public string ProjectColor { get; init; } = "#B7A99B";
+        public List<MemoTask> Tasks { get; init; } = [];
+        public int Count => Tasks.Count;
+    }
+
     private readonly StorageService _storage = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(1) };
     private readonly DispatcherTimer _quickAddFeedbackTimer = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -57,6 +65,7 @@ public partial class MainWindow : Window
     {
         var views = new ObservableCollection<ViewOption>
         {
+            new("all", "全部任务", "#C9826A", ReminderCountForView("all")),
             new("unclassified", "未分类任务", "#B7A99B", ReminderCountForView("unclassified"))
         };
         foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
@@ -95,7 +104,7 @@ public partial class MainWindow : Window
         var today = DateTime.Today;
         var tasks = SelectedTasks()
             .Where(x => !x.IsCompleted)
-            .OrderBy(x => x.IsOverdue ? -1 : x.Priority switch { "P0" => 0, "P1" => 1, "P2" => 2, _ => 3 })
+            .OrderBy(x => x.IsOverdue ? -1 : MemoPriority.Rank(x.Priority))
             .ThenBy(x => x.DueAt)
             .ToList();
         DecorateTasks(tasks);
@@ -113,6 +122,7 @@ public partial class MainWindow : Window
         TodayTasks.ItemsSource = todayTasks;
         WeekTasks.ItemsSource = weekTasks;
         LongTermTasks.ItemsSource = longTerm;
+        RefreshQuadrants(todayTasks);
         var weekStartForCompleted = StartOfWeek(today);
         CompletedTodayTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date == today).ToList();
         CompletedWeekTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date >= weekStartForCompleted && (x.CompletedAt ?? x.ModifiedAt).Date < today).ToList();
@@ -129,6 +139,7 @@ public partial class MainWindow : Window
 
     private IEnumerable<MemoTask> SelectedTasks() => _currentView switch
     {
+        "all" => _data.Tasks.Where(x => !_data.Projects.Any(project => project.IsHidden && project.Id == x.ProjectId)),
         "none" or "unclassified" => _data.Tasks.Where(x => string.IsNullOrWhiteSpace(x.ProjectId)),
         _ when _currentView.StartsWith("project:") => _data.Tasks.Where(x => x.ProjectId == _currentView[8..]),
         "hidden" => Enumerable.Empty<MemoTask>(),
@@ -139,6 +150,7 @@ public partial class MainWindow : Window
     {
         return _data.Tasks.Count(task => _unreadReminderTaskIds.Contains(task.Id) && !task.IsCompleted && viewId switch
         {
+            "all" => !_data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
             "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
             "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
             _ when viewId.StartsWith("project:") => task.ProjectId == viewId[8..],
@@ -167,6 +179,7 @@ public partial class MainWindow : Window
 
     private bool IsTaskInView(MemoTask task, string viewId) => viewId switch
     {
+        "all" => !_data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
         "unclassified" => string.IsNullOrWhiteSpace(task.ProjectId),
         "hidden" => _data.Projects.Any(project => project.IsHidden && project.Id == task.ProjectId),
         _ when viewId.StartsWith("project:") => task.ProjectId == viewId[8..],
@@ -178,6 +191,7 @@ public partial class MainWindow : Window
         var projects = _data.Projects.ToDictionary(x => x.Id);
         foreach (var task in tasks)
         {
+            task.Priority = MemoPriority.Normalize(task.Priority);
             if (projects.TryGetValue(task.ProjectId, out var project))
             {
                 task.ProjectName = project.Name;
@@ -211,9 +225,60 @@ public partial class MainWindow : Window
     private void ViewToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (TodayPanel is null || WeekPanel is null || LongTermPanel is null) return;
+        var quadrantMode = QuadrantModeButton?.IsChecked == true;
+        BoardScroll.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
+        QuadrantScroll.Visibility = quadrantMode ? Visibility.Visible : Visibility.Collapsed;
+        TodayToggle.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
+        WeekToggle.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
+        LongToggle.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
+        CompletedExpander.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
+        if (quadrantMode) return;
         TodayPanel.Visibility = TodayToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         WeekPanel.Visibility = WeekToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         LongTermPanel.Visibility = LongToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ModeToggle_Changed(object sender, RoutedEventArgs e) => ViewToggle_Changed(sender, e);
+
+    private void RefreshQuadrants(IReadOnlyList<MemoTask> todayTasks)
+    {
+        SetQuadrant(P0Groups, P0CountText, todayTasks, "p0");
+        SetQuadrant(P1Groups, P1CountText, todayTasks, "p1");
+        SetQuadrant(P2Groups, P2CountText, todayTasks, "p2");
+        SetQuadrant(P3Groups, P3CountText, todayTasks, "p3");
+    }
+
+    private void SetQuadrant(ItemsControl groupsControl, TextBlock countText, IReadOnlyList<MemoTask> tasks, string priority)
+    {
+        var quadrantTasks = tasks
+            .Where(x => MemoPriority.Normalize(x.Priority) == priority)
+            .OrderBy(x => ProjectOrder(x.ProjectId))
+            .ThenBy(x => x.ProjectName)
+            .ThenBy(x => x.DueAt)
+            .ThenBy(x => x.Title)
+            .ToList();
+
+        groupsControl.ItemsSource = quadrantTasks
+            .GroupBy(x => string.IsNullOrWhiteSpace(x.ProjectId) ? "" : x.ProjectId)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new ProjectTaskGroup
+                {
+                    ProjectName = first.ProjectName,
+                    ProjectColor = first.ProjectColor,
+                    Tasks = group.ToList()
+                };
+            })
+            .ToList();
+        countText.Text = $"{quadrantTasks.Count} 项";
+    }
+
+    private int ProjectOrder(string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(projectId)) return -1;
+        var index = _data.Projects.FindIndex(x => x.Id == projectId);
+        return index < 0 ? int.MaxValue : index;
     }
 
     private void EditProjectMenu_Click(object sender, RoutedEventArgs e)
@@ -502,7 +567,7 @@ public partial class MainWindow : Window
         var tasks = _data.Tasks.Where(x => !hiddenProjectIds.Contains(x.ProjectId) && ((x.StartAt ?? x.CreatedAt) >= start && (x.StartAt ?? x.CreatedAt) < start.AddDays(7))).ToList();
         var done = tasks.Count(x => x.IsCompleted);
         var projects = _data.Projects.Where(p => !p.IsHidden).Select(p => $"{p.Name}：{tasks.Count(x => x.ProjectId == p.Id && x.IsCompleted)}/{tasks.Count(x => x.ProjectId == p.Id)}");
-        var priorities = new[] { "P0", "P1", "P2", "P3" }.Select(p => $"{p}：{tasks.Count(x => x.Priority == p && x.IsCompleted)}/{tasks.Count(x => x.Priority == p)}");
+        var priorities = MemoPriority.Values.Select(p => $"{p}：{tasks.Count(x => MemoPriority.Normalize(x.Priority) == p && x.IsCompleted)}/{tasks.Count(x => MemoPriority.Normalize(x.Priority) == p)}");
         WpfMessageBox.Show($"总任务：{tasks.Count}\n已完成：{done}\n未完成：{tasks.Count - done}\n逾期：{tasks.Count(x => x.IsOverdue)}\n完成率：{(tasks.Count == 0 ? 0 : done * 100 / tasks.Count)}%\n\n项目统计\n{string.Join("\n", projects)}\n\n优先级统计\n{string.Join("\n", priorities)}", "本周统计");
     }
 

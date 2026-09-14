@@ -39,7 +39,7 @@ public sealed class MemoTask
     public string Description { get; set; } = "";
     public string ProjectId { get; set; } = "";
     public MemoTaskStatus Status { get; set; } = MemoTaskStatus.InProgress;
-    public string Priority { get; set; } = "P2";
+    public string Priority { get; set; } = "p2";
     public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; } = DateTime.Today.AddHours(18);
     public DateTime CreatedAt { get; set; } = DateTime.Now;
@@ -58,6 +58,7 @@ public sealed class MemoTask
     [JsonIgnore] public bool CanDelete => !IsCompleted;
     [JsonIgnore] public bool CanSnooze => !IsCompleted;
     [JsonIgnore] public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    [JsonIgnore] public string PriorityText => MemoPriority.Normalize(Priority);
     [JsonIgnore] public string ProjectName { get; set; } = "未分类";
     [JsonIgnore] public string ProjectColor { get; set; } = "#B7A99B";
     [JsonIgnore] public bool IsOverdue => !IsCompleted && Status != MemoTaskStatus.Paused && DueAt is not null && DueAt < DateTime.Now;
@@ -76,6 +77,28 @@ public sealed class MemoTask
         IsLongTerm ? "📚 长期" : "",
         SnoozedUntil > DateTime.Now ? $"⏰ {SnoozedUntil:MM-dd HH:mm}" : ""
     }.Where(x => x.Length > 0));
+}
+
+public static class MemoPriority
+{
+    public static readonly string[] Values = ["p0", "p1", "p2", "p3"];
+
+    public static string Normalize(string? priority)
+    {
+        if (string.Equals(priority, "p0", StringComparison.OrdinalIgnoreCase)) return "p0";
+        if (string.Equals(priority, "p1", StringComparison.OrdinalIgnoreCase)) return "p1";
+        if (string.Equals(priority, "p2", StringComparison.OrdinalIgnoreCase)) return "p2";
+        if (string.Equals(priority, "p3", StringComparison.OrdinalIgnoreCase)) return "p3";
+        return "p2";
+    }
+
+    public static int Rank(string? priority) => Normalize(priority) switch
+    {
+        "p0" => 0,
+        "p1" => 1,
+        "p2" => 2,
+        _ => 3
+    };
 }
 
 public sealed class AppSettings

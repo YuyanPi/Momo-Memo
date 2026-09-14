@@ -173,8 +173,8 @@ public sealed class NaturalLanguageTaskParser
     private static DateTime WithTime(DateTime date, TimeSpan time) => date.Date.Add(time);
 
     private static string ParsePriority(string text) => Regex.Match(text, @"\bP(?<level>[0-3])\b", RegexOptions.IgnoreCase) is { Success: true } match
-        ? $"P{match.Groups["level"].Value}"
-        : text.Contains("紧急") ? "P0" : text.Contains("重要") ? "P1" : "P2";
+        ? $"p{match.Groups["level"].Value}"
+        : text.Contains("紧急") ? "p0" : text.Contains("重要") ? "p1" : "p2";
 
     private static string CleanupTitle(string text, ProjectItem? project, string? mentionedProject, string? datePattern, IEnumerable<string> timePatterns)
     {

@@ -18,7 +18,7 @@ public partial class TaskEditorWindow : Window
         ProjectBox.ItemsSource = new[] { new ProjectItem { Id = "", Name = "未分类" } }
             .Concat(projects.Where(x => x.IsActive)).ToList();
         StatusBox.ItemsSource = StatusOptionsFor(task);
-        PriorityBox.ItemsSource = new[] { "P0", "P1", "P2", "P3" };
+        PriorityBox.ItemsSource = MemoPriority.Values;
         ReminderRuleBox.ItemsSource = new[]
         {
             new Option("None", "不启用工作时间提醒"), new Option("WorkHours", "工作时间定时提醒"),
@@ -33,7 +33,7 @@ public partial class TaskEditorWindow : Window
         DescriptionBox.Text = task.Description;
         ProjectBox.SelectedValue = task.ProjectId;
         StatusBox.SelectedValue = CurrentStatusId(task);
-        PriorityBox.SelectedItem = task.Priority;
+        PriorityBox.SelectedItem = MemoPriority.Normalize(task.Priority);
         SetDateTime(StartDatePicker, StartHourBox, StartMinuteBox, task.StartAt, 9, 0);
         SetDateTime(DueDatePicker, DueHourBox, DueMinuteBox, task.DueAt, 18, 0);
         LongTermBox.IsChecked = task.IsLongTerm;
@@ -67,7 +67,7 @@ public partial class TaskEditorWindow : Window
         _task.Description = DescriptionBox.Text.Trim();
         _task.ProjectId = ProjectBox.SelectedValue?.ToString() ?? "";
         _task.Status = StatusFor(StatusBox.SelectedValue?.ToString());
-        _task.Priority = PriorityBox.SelectedItem?.ToString() ?? "P2";
+        _task.Priority = MemoPriority.Normalize(PriorityBox.SelectedItem?.ToString());
         _task.StartAt = start;
         _task.DueAt = due;
         _task.MustToday = false;
