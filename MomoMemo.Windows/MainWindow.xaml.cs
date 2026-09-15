@@ -230,17 +230,13 @@ public partial class MainWindow : Window
         if (ViewsList.SelectedItem is not ViewOption view) return;
         _currentView = view.Id;
         _data.Settings.LastSelectedProjectId = _currentView;
-        if (!CanUseQuadrants()) BoardModeButton.IsChecked = true;
         if (IsLoaded) RefreshTasks();
     }
 
     private void ViewToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (TodayPanel is null || WeekPanel is null || LongTermPanel is null) return;
-        var canUseQuadrants = CanUseQuadrants();
-        QuadrantModeButton.Visibility = canUseQuadrants ? Visibility.Visible : Visibility.Collapsed;
-        if (!canUseQuadrants) BoardModeButton.IsChecked = true;
-        var quadrantMode = canUseQuadrants && QuadrantModeButton?.IsChecked == true;
+        var quadrantMode = IsAllTasksView();
         BoardScroll.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
         QuadrantScroll.Visibility = quadrantMode ? Visibility.Visible : Visibility.Collapsed;
         TodayToggle.Visibility = quadrantMode ? Visibility.Collapsed : Visibility.Visible;
@@ -253,9 +249,7 @@ public partial class MainWindow : Window
         LongTermPanel.Visibility = LongToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void ModeToggle_Changed(object sender, RoutedEventArgs e) => ViewToggle_Changed(sender, e);
-
-    private bool CanUseQuadrants() => _currentView == "all";
+    private bool IsAllTasksView() => _currentView == "all";
 
     private void RefreshQuadrants(IReadOnlyList<MemoTask> todayTasks)
     {
