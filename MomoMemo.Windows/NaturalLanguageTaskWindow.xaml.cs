@@ -19,7 +19,7 @@ public partial class NaturalLanguageTaskWindow : Window
         _currentProjectId = currentProjectId;
         _settings = settings;
         ProjectBox.ItemsSource = new[] { new ProjectItem { Id = "", Name = "未分类" } }.Concat(projects.Where(x => x.IsActive)).ToList();
-        PriorityBox.ItemsSource = new[] { "P0", "P1", "P2", "P3" };
+        PriorityBox.ItemsSource = MemoPriority.Values;
         DueHourBox.ItemsSource = Enumerable.Range(0, 24).Select(x => x.ToString("00")).ToList();
         DueMinuteBox.ItemsSource = Enumerable.Range(0, 60).Select(x => x.ToString("00")).ToList();
         WorkHoursReminderBox.IsChecked = settings.DefaultWorkHoursReminderEnabled;
@@ -34,7 +34,7 @@ public partial class NaturalLanguageTaskWindow : Window
         var result = _parser.Parse(RawTextBox.Text, _projects, _currentProjectId, DateTime.Now);
         TitleBox.Text = result.Title;
         ProjectBox.SelectedValue = result.ProjectId;
-        PriorityBox.SelectedItem = result.Priority;
+        PriorityBox.SelectedItem = MemoPriority.Normalize(result.Priority);
         ReminderBox.IsChecked = result.ReminderEnabled;
         NoDueBox.IsChecked = result.DueAt is null;
         DueDatePicker.SelectedDate = result.DueAt?.Date;
@@ -81,7 +81,7 @@ public partial class NaturalLanguageTaskWindow : Window
             Title = title,
             Description = AddDescriptionBox.IsChecked == true ? DescriptionBox.Text.Trim() : "",
             ProjectId = ProjectBox.SelectedValue?.ToString() ?? "",
-            Priority = PriorityBox.SelectedItem?.ToString() ?? "P2",
+            Priority = MemoPriority.Normalize(PriorityBox.SelectedItem?.ToString()),
             DueAt = due,
             IsLongTerm = LongTermBox.IsChecked == true,
             ReminderEnabled = ReminderBox.IsChecked == true,

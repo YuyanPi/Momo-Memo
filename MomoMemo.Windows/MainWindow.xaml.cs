@@ -122,7 +122,7 @@ public partial class MainWindow : Window
         TodayTasks.ItemsSource = todayTasks;
         WeekTasks.ItemsSource = weekTasks;
         LongTermTasks.ItemsSource = longTerm;
-        RefreshQuadrants(todayTasks);
+        RefreshQuadrants(tasks);
         var weekStartForCompleted = StartOfWeek(today);
         CompletedTodayTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date == today).ToList();
         CompletedWeekTasks.ItemsSource = completed.Where(x => (x.CompletedAt ?? x.ModifiedAt).Date >= weekStartForCompleted && (x.CompletedAt ?? x.ModifiedAt).Date < today).ToList();
