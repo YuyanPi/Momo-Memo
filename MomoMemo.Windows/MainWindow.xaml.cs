@@ -65,15 +65,14 @@ public partial class MainWindow : Window
     {
         var views = new ObservableCollection<ViewOption>
         {
-            new("all", "全部任务", "#C9826A", ReminderCountForView("all")),
-            new("unclassified", "未分类任务", "#B7A99B", ReminderCountForView("unclassified"))
+            new("all", "全部任务", "#C9826A", ReminderCountForView("all"))
         };
         foreach (var project in _data.Projects.Where(x => x.IsActive && !x.IsHidden))
             views.Add(new($"project:{project.Id}", project.Name, project.Color, ReminderCountForView($"project:{project.Id}")));
         var hiddenCount = _data.Projects.Count(x => x.IsActive && x.IsHidden);
         if (hiddenCount > 0)
             views.Add(new("hidden", $"隐藏项目（{hiddenCount}）", "#B7A99B", ReminderCountForView("hidden")));
-        if (!views.Any(x => x.Id == _currentView)) _currentView = "unclassified";
+        if (!views.Any(x => x.Id == _currentView)) _currentView = "all";
         ViewsList.ItemsSource = views;
         ViewsList.SelectedItem = views.FirstOrDefault(x => x.Id == _currentView) ?? views[0];
     }
@@ -314,7 +313,7 @@ public partial class MainWindow : Window
         if (WpfMessageBox.Show(message, "删除项目", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         foreach (var task in _data.Tasks.Where(x => x.ProjectId == project.Id)) task.ProjectId = "";
         _data.Projects.Remove(project);
-        _currentView = _data.Projects.FirstOrDefault(x => x.IsActive && !x.IsHidden)?.Id is { } id ? $"project:{id}" : "unclassified";
+        _currentView = "all";
         SaveAndRefresh(true);
     }
 
@@ -348,7 +347,7 @@ public partial class MainWindow : Window
         var edit = new MenuItem { Header = "编辑项目" };
         edit.Click += EditProjectMenu_Click;
         var hide = new MenuItem { Header = "隐藏项目" };
-        hide.Click += (_, _) => { var project = SelectedProject(); if (project is null) return; project.IsHidden = !project.IsHidden; _currentView = project.IsHidden ? "unclassified" : $"project:{project.Id}"; SaveAndRefresh(true); };
+        hide.Click += (_, _) => { var project = SelectedProject(); if (project is null) return; project.IsHidden = !project.IsHidden; _currentView = project.IsHidden ? "all" : $"project:{project.Id}"; SaveAndRefresh(true); };
         var delete = new MenuItem { Header = "删除项目" };
         delete.Click += DeleteProjectMenu_Click;
         menu.Items.Add(edit);
@@ -744,3 +743,4 @@ public partial class MainWindow : Window
         return date.Date.AddDays(-daysSinceMonday);
     }
 }
+
